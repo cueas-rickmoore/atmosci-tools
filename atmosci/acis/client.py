@@ -11,31 +11,52 @@ from atmosci.utils.timeutils import asDatetime
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class AcisWebServicesClient:
+ALL_LOC_KEYS = ('basin','bbox','climdiv','county','cwa','sid','sids','state')
+DEFAULT_ELEMS = ['maxt','mint','pcpn']
+DEFAULT_URL = 'http://data.rcc-acis.org/'
+NONE_ERR = '"elems" may not be None. A valid element specification is required.'
 
-    def __init__(self, base_url='http://data.rcc-acis.org/', debug=False):
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+def tightJson(value): return json.dumps(value, separators=(',', ':'))
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class AcisWebServicesClient(object):
+
+    def __init__(self, base_url=DEFAULT_URL, valid_elems=DEFAULT_ELEMS,
+                       loc_keys=ALL_LOC_KEYS, date_required=True, debug=False):
         self.base_url = base_url
+        self.date_required = date_required
         self.debug = debug
-        self.last_query = None
+        self.prev_query = None
+        self.loc_keys = loc_keys
+        self.valid_elems = valid_elems
+        #!TODO : list of valid metadata and validation method 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def request(self, *args, **request_dict):
+    def request(self, query_type, **request_dict):
         raise NotImplementedError
 
-    def submitRequest(self, data_type, **request_dict):
-        query_json = self.jsonFromRequest(data_type, request_dict)
-        return self.submitQuery(data_type, query_json)
+    def submitRequest(self, query_type, **request_dict):
+        print 'submitRequest', query_type
+        print request_dict
+        query_json = self.jsonFromRequest(query_type, request_dict)
+        print query_json
+        return self.submitQuery(query_type, query_json)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def query(self, json_string):
         raise NotImplementedError
 
-    def submitQuery(self, data_type, json_string):
+    def submitQuery(self, query_type, json_string):
         ERROR_MSG = 'Error processing response to query : %s %s'
-
+        debug = self.debug
+        if debug:
+            print '\n', self.__class__.__name__, 'submitQuery', query_type
+            print json_string
         if not isinstance(json_string, basestring):
             raise TypeError, '"json_string" argument must be a string'
         try:
@@ -46,17 +67,19 @@ class AcisWebServicesClient:
             
         url = self.base_url
         if url.endswith('/'):
-            if data_type.startswith('/'): url += data_type[1:]
-            else: url += data_type
+            if query_type.startswith('/'): url += query_type[1:]
+            else: url += query_type
         else:
-            if data_type.startswith('/'): url += data_type
-            else: url += '/' + data_type
+            if query_type.startswith('/'): url += query_type
+            else: url += '/' + query_type
 
-        if self.debug:
+        if debug:
             print 'POST', url
             print 'params =', json_string
 
         post_params = urllib.urlencode({'params':json_string})
+        if debug:
+            print '\nencoded json string\n', post_params
         req = urllib2.Request(url, post_params,
                               { 'Accept':'application/json' }
                              )
@@ -74,7 +97,7 @@ class AcisWebServicesClient:
             raise e
 
         # track last successful query
-        self.last_query = json_string
+        self.prev_query = json_string
 
         return response_string, response
 
@@ -85,12 +108,14 @@ class AcisWebServicesClient:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def jsonFromRequest(self, data_type, request_dict):
+    def jsonFromRequest(self, query_type, request_dict):
         # look for a valid date or date range
-        query_dict = self._validateRequestDate(request_dict)
+        if self.date_required:
+            query_dict = self._validateRequestDate(request_dict)
+        else: query_dict = { }
 
         # make sure there is a valid location for this type of request
-        key, location = self._validateLocation(date_type, request_dict)
+        key, location = self._validateLocation(request_dict)
         query_dict[key] = location
 
         # metadata
@@ -98,8 +123,13 @@ class AcisWebServicesClient:
         if metadata is not None: query_dict['meta'] = metadata
 
         # data elements
-        if 'Data' in data_type:
+        if query_type.endswith('Data'):
             query_dict['elems'] = self._validateDataElems(request_dict)
+
+        # query type specific updates
+        required = self._classSpecificRequirements(request_dict)
+        if required is not None:
+            query_dict.update(required)
 
         return json.dumps(query_dict)
 
@@ -151,9 +181,27 @@ class AcisWebServicesClient:
 
     # - # - # - # - # - # - # - # - # - # - # - # - # - # - # - # - # - # - #
 
+    def _classSpecificRequirements(self, request_dict):
+        return None
+
     def _validateDataElems(self, request_dict):
-        if'elems' in request_dict: return request_dict['elems']
-        raise KeyError, "'elems' key missing from query." % data_type
+        if 'elems' not in request_dict:
+            raise KeyError, '"elems" key missing from request.'
+
+        elems = request_dict['elems']
+        if elems is None:
+            raise ValueError, NONE_ERR
+        elif isinstance(elems, basestring):
+            if elems.startswith('['): return json.dumps(elems)
+            elif elems.startswith('{'): return [json.dumps(elems),]
+            elif ',' in elems:
+                return [ {"name":name} for name in elems.split(',') ]
+            else: return [ {"name":elems} ]
+        elif isinstance(elems, (list,tuple)):
+            return [ {"name":name} for name in elems ]
+        elif isinstance(elems, dict): return elems
+        else:
+            raise TypeError, TYPE_ERR % type(elems)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -168,25 +216,18 @@ class AcisWebServicesClient:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _validateLocation(self, date_type, request_dict):
+    def _validateLocation(self, request_dict):
         # make sure there is a valid location in the request
-        if data_type == 'StnData': loc_keys = ['sid',]
-        elif data_type == 'MultiStnData':
-            loc_keys = ['state','county','climdiv','cwa','basin','bbox','sids']
-        elif data_type == 'StnMeta':
-            loc_keys = ['state','county','climdiv','cwa','basin','bbox']
-        elif data_type == 'GridData':
-            loc_keys = ['state','bbox','loc']
-        elif data_type == 'General':
-            loc_keys = ['state','county','climdiv','cwa','basin']
+        #if query_type == 'StnMeta':
+        #    loc_keys = ['state','county','climdiv','cwa','basin','bbox']
+        #if query_type == 'General':
+        #    loc_keys = ['state','county','climdiv','cwa','basin']
 
-        union = set(loc_keys) & set(request_dict)
-
+        union = list(set(self.loc_keys) & set(request_dict))
         if len(union) == 0:
-            raise KeyError, "No location key in %s query." % data_type
+            raise KeyError, "No location key in %s query." % query_type
         elif len(union) > 1:
-            raise KeyError, "Multiple location keys in %s query." % data_type
-
+            raise KeyError, "Multiple location keys in %s query." % query_type
         key = union[0]
         return key, request_dict[key]
 

@@ -15,7 +15,7 @@ class GDDCalculator(object):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def __call__(self, mint, maxt, debug=False):
-        return estimateGDD(mint, maxt, debug)
+        return self.estimateGDD(mint, maxt, debug)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -58,7 +58,7 @@ class ArrayGDDCalculator(object):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def __call__(self, mint, maxt, debug=False):
-        return estimateGDD(mint, maxt, debug)
+        return self.estimateGDD(mint, maxt, debug)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

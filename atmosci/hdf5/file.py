@@ -14,6 +14,10 @@ from atmosci.hdf5.mixin import Hdf5DataReaderMixin, Hdf5DataWriterMixin
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+from atmosci.hdf5.mixin import BOGUS_VALUE
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 class Hdf5FileReader(Hdf5DataReaderMixin, object):
     """ Provides read-only access to datasets, groups and other obsects in
     Hdf5-encoded files.
@@ -86,10 +90,12 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         self.assertFileOpen()
         return self._getDataset_(self._hdf5_file_, dataset_name)
 
-    def getDatasetAttribute(self, dataset_name, attr_name):
+    def getDatasetAttribute(self, dataset_name, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
         parent = self._hdf5_file_
-        return self._getDatasetAttribute_(parent, dataset_name, attr_name)
+        attr_value = self._getDatasetAttribute_(parent, dataset_name, 
+                                                attr_name, default)
+        return attr_value
 
     def getDatasetAttributes(self, dataset_name):
         self.assertFileOpen()
@@ -125,9 +131,9 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         self._hdf5_file_ = None
         self._hdf5_file_mode = None
 
-    def getFileAttribute(self, attr_name):
+    def getFileAttribute(self, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
-        return self._getFileAttribute_(self._hdf5_file_, attr_name)
+        return self._getFileAttribute_(self._hdf5_file_, attr_name, default)
 
     def getFileAttributes(self):
         self.assertFileOpen()
@@ -169,9 +175,11 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         _object = self._getGroup_(self._hdf5_file_, group_name)
         return _object
 
-    def getGroupAttribute(self, group_name, attr_name):
+    def getGroupAttribute(self, group_name, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
-        return self._getGroupAttribute_(self._hdf5_file_, group_name, attr_name)
+        attr_value = self._getGroupAttribute_(self._hdf5_file_, group_name,
+                                              attr_name, default)
+        return attr_value 
 
     def getGroupAttributes(self, group_name):
         self.assertFileOpen()
@@ -205,9 +213,11 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         if object_name.lower() == '__file__': return self._hdf5_file_
         return self._getObject_(self._hdf5_file_, object_name)
 
-    def getObjectAttribute(self, object_name, attr_name):
+    def getObjectAttribute(self, object_name, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
-        return self._getObjectAttribute_(self.getObject(object_name), attr_name)
+        attr_value = self._getObjectAttribute_(self.getObject(object_name),
+                                               attr_name, default)
+        return attr_value 
 
     def getObjectAttributes(self, object_name):
         self.assertFileOpen()

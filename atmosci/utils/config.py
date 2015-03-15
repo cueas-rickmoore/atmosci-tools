@@ -273,8 +273,9 @@ class ConfigObject(object):
         return len(self.__dict__['__ATTRIBUTES__']) > 0
     has_attrbutes = property(hasAttributes)
 
-    def isAttribute(self, name):
+    def hasAttribute(self, name):
         return name in self.__dict__['__ATTRIBUTES__'].keys()
+    isAttribute = hasAttribute # legacy compatability
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # tests work on children and attributes

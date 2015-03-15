@@ -139,7 +139,8 @@ class SmtpMailer(object):
             msg[key] = value
 
         if not test_ and mail_to is not None: 
-            self.smtp_server.sendmail(sent_by, send_to, msg.as_string())
+            result = self.smtp_server.sendmail(sent_by,send_to,msg.as_string())
+            print 'SmtpMailer.sendMessage', result
         return msg
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -168,7 +169,9 @@ class SmtpHtmlMailer(SmtpMailer):
             msg[key] = value
 
         if not test_ and mail_to is not None: 
-            self.smtp_server.sendmail(sent_by, send_to, msg.as_string())
+            result = self.smtp_server.sendmail(sent_by, send_to, msg.as_string())
+            if result: print 'SmtpHtmlMailer.sendMessage result :\n', result
+
         return msg
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

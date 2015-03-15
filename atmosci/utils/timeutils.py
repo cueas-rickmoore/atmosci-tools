@@ -1,7 +1,9 @@
 
 import datetime
-from dateutil.relativedelta import relativedelta
 from copy import copy
+
+from dateutil.relativedelta import relativedelta
+ONE_DAY = relativedelta(days=1)
 import pytz
 
 import numpy as N
@@ -77,9 +79,7 @@ def standardToLocalTime(date, timezone='US/Eastern'):
 class DateIterator(object):
     def __init__(self, start_date, end_date, julian=False):
         self.date = asDatetime(start_date)
-        if end_date is not None:
-            self.end_date = asDatetime(end_date)
-        else: self.end_date = self.date
+        self.end_date = asDatetime(end_date)
         self.julian = julian
 
     def __iter__(self): return self

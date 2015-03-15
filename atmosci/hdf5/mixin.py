@@ -18,10 +18,15 @@ DATASET_CREATE_ARGS = ('compression', 'compression_opts', 'chunks', 'dtype',
 TIME_SPAN_ERROR = 'Invalid time span. '
 TIME_SPAN_ERROR += 'Either "date" OR "start_date" plus "end_date" are required.'
 
+WALK_ERRMSG = "%s has no child named '%s'"
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-WALK_ERRMSG = "%s has no child named '%s'"
+class BogusValue:
+    def __str__(self): return '!^BOGUS.VALUE^!'
+BOGUS_VALUE = BogusValue()
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def fullObjectPath(hdf5_object):
     path = [hdf5_object.name, ]
@@ -117,7 +122,8 @@ class Hdf5DataReaderMixin:
         self.assertDatasetObject(_object)
         return _object
 
-    def _getDatasetAttribute_(self, parent, dataset_name, attr_name):
+    def _getDatasetAttribute_(self, parent, dataset_name, attr_name,
+                                    default=BOGUS_VALUE):
         """ Returns a the value of a single attribute of the dataset
         indicated by dataset_key.
         """
@@ -125,6 +131,7 @@ class Hdf5DataReaderMixin:
         try:
             return dataset.attrs[safeDataKey(attr_name)]
         except Exception as e:
+            if default != BOGUS_VALUE: return default
             errmsg = "ERROR retrieving attribute '%s' from dataset '%s'"
             e.args = (errmsg % (attr_name, dataset_name),) + e.args
             raise e
@@ -165,9 +172,9 @@ class Hdf5DataReaderMixin:
         self.assertFileObject(data_file)
         data_file.close()
 
-    def _getFileAttribute_(self, data_file, attr_name):
+    def _getFileAttribute_(self, data_file, attr_name, default=BOGUS_VALUE):
         self.assertFileObject(data_file)
-        return self._getObjectAttribute_(data_file, attr_name)
+        return self._getObjectAttribute_(data_file, attr_name, default)
 
     def _getFileAttributes_(self, data_file):
         self.assertFileObject(data_file)
@@ -192,9 +199,10 @@ class Hdf5DataReaderMixin:
         self.assertGroupObject(_object)
         return _object
 
-    def _getGroupAttribute_(self, parent, group_name, attr_name):
+    def _getGroupAttribute_(self, parent, group_name, attr_name,
+                                  default=BOGUS_VALUE):
         group = self._getGroup_(parent, group_name)
-        return self._getObjectAttribute_(group, attr_name)
+        return self._getObjectAttribute_(group, attr_name, default)
 
     def _getGroupAttributes_(self, parent, group_name):
         group = self._getGroup_(parent, group_name)
@@ -224,12 +232,13 @@ class Hdf5DataReaderMixin:
             e.args = (errmsg % object_key,) + e.args
             raise e
 
-    def _getObjectAttribute_(self, _object, attr_name):
+    def _getObjectAttribute_(self, _object, attr_name, default=BOGUS_VALUE):
         """ Returns a the value of a single attribute of an object
         """
         try:
             return _object.attrs[safeDataKey(attr_name)]
         except Exception as e:
+            if default != BOGUS_VALUE: return default
             errmsg = "ERROR retrieving attribute '%s' from object '%s'"
             e.args = (errmsg % (attr_name, _object.name),) + e.args
             raise e

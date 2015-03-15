@@ -3,6 +3,7 @@ and other objects in Hdf5 encoded files.
 """
 
 from atmosci.hdf5.mixin import fullObjectPath
+from atmosci.hdf5.mixin import BOGUS_VALUE
 
 from atmosci.hdf5.file import Hdf5FileReader
 from atmosci.hdf5.file import Hdf5FileManager
