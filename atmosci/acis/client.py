@@ -1,13 +1,14 @@
 
 import sys
 import urllib, urllib2
+import datetime
 
 try:
     import simplejson as json
 except ImportError:
     import json
 
-from atmosci.utils.timeutils import asDatetime
+from atmosci.utils.timeutils import asDatetimeDate
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -40,10 +41,11 @@ class AcisWebServicesClient(object):
         raise NotImplementedError
 
     def submitRequest(self, query_type, **request_dict):
-        print 'submitRequest', query_type
-        print request_dict
+        debug = self.debug
+        if debug:
+            print 'submitRequest', query_type
+            print request_dict
         query_json = self.jsonFromRequest(query_type, request_dict)
-        print query_json
         return self.submitQuery(query_type, query_json)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -78,11 +80,12 @@ class AcisWebServicesClient(object):
             print 'params =', json_string
 
         post_params = urllib.urlencode({'params':json_string})
-        if debug:
-            print '\nencoded json string\n', post_params
+        if debug: print '\nencoded json string\n', post_params
         req = urllib2.Request(url, post_params,
                               { 'Accept':'application/json' }
                              )
+        if debug:
+            print 'request', req.get_full_url(), req.get_data()
         url += ' json=' + post_params
         try:
             response = urllib2.urlopen(req)
@@ -95,6 +98,7 @@ class AcisWebServicesClient(object):
         except Exception as e:
             setattr(e, 'details', ERROR_MSG % ('POST',url))
             raise e
+        if debug: print 'response', response_string
 
         # track last successful query
         self.prev_query = json_string
@@ -104,7 +108,10 @@ class AcisWebServicesClient(object):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def acisDateString(self, date):
-        return asDatetime(date).strftime('%Y-%m-%d')
+        return asDatetimeDate(date).strftime('%Y-%m-%d')
+
+    def acisStringToDate(self, acis_date_str):
+        return datetime.date(*[int(part) for part in acis_date_str.split('-')])
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
