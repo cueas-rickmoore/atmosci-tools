@@ -25,6 +25,32 @@ MONTH_NAMES = ('January','February','March','April','May','June','July',
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+def elapsedTime(start_time, as_string=False):
+    elapsed_time = datetime.datetime.now() - start_time
+    if as_string:
+        seconds = elapsed_time.seconds
+        microseconds = elapsed_time.microseconds
+        if seconds > 3600:
+            hours = seconds / 3600
+            remainder = seconds % 3600
+            minutes = remainder / 60
+            seconds = remainder % 60
+            if hours == 1:
+                msg = '%d hour %d mins %d.%06d secs'
+            else:
+                msg = '%d hours %d minutes %d.%06d seconds'
+            return msg % (hours, minutes, seconds, microseconds)
+        elif seconds > 60:
+            minutes = seconds / 60
+            seconds = seconds % 60
+            msg = '%d minutes %d.%06d seconds'
+            return msg % (minutes, seconds, microseconds)
+        else:
+            return '%d.%06d seconds.' % (seconds, microseconds)
+    else: return elapsed_time
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 def isDaylightSavingsTime(date, timezone='US/Eastern'):
     tz = pytz.timezone(timezone)
     if isinstance(date, datetime.datetime): test_date = date
@@ -77,9 +103,10 @@ def standardToLocalTime(date, timezone='US/Eastern'):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class DateIterator(object):
+
     def __init__(self, start_date, end_date, julian=False):
-        self.date = asDatetime(start_date)
-        self.end_date = asDatetime(end_date)
+        self.date = asDatetimeDate(start_date)
+        self.end_date = asDatetimeDate(end_date)
         self.julian = julian
 
     def __iter__(self): return self
@@ -102,7 +129,7 @@ def daysInYear(year):
     return 365
 
 def isLeapYear(year):
-    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+    return (year % 4 == 0) and ((year % 100 != 0) or (year % 400 == 0))
 
 def isLeapDay(date):
     if isinstance(date, (datetime.datetime, datetime.date)):
@@ -154,17 +181,39 @@ def decodeIntegerDate(date):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def asAcisQueryDate(date):
-    return asDatetime(date).strftime('%Y-%m-%d')
+    return asDatetimeDate(date).strftime('%Y-%m-%d')
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+def asDatetimeDate(date):
+    if isinstance(date, datetime.datetime):
+        return datetime.date(date.year, date.month, date.day)
+    elif isinstance(date, datetime.date): return date
+    else: return datetime.date(*dateAsTuple(date, False))
+
 def asDatetime(date, need_time=False):
-    _date = dateAsTuple(date, need_time)
-    date_len = len(_date)
-    if need_time:
-        return datetime.datetime(*_date)
-    if date_len > 3: _date = _date[:3]
-    return datetime.datetime(*_date)
+    if isinstance(date, datetime.datetime): return date
+    elif isinstance(date, datetime.date):
+        return datetime.datetime(date.year, date.month, date.day, 0, 0, 0)
+    else:
+        _date = dateAsTuple(date, need_time)
+        if need_time: return datetime.datetime(*_date)
+        return datetime.datetime(_date[0], _date[1], _date[2], 0, 0, 0)
+
+def matchDateType(date, date_obj_to_match):
+    if isinstance(date_obj_to_match, datetime.datetime):
+        return asDatetime(date)
+    elif isinstance(date_obj_to_match, datetime.date):
+        return asDatetimeDate(date)
+    elif isinstance(date_obj_to_match, tuple):
+        return dateAsTuple(date)
+    elif isinstance(date_obj_to_match, list):
+        return list(dateAsTuple(date))
+    elif isinstance(date_obj_to_match, basestring):
+        return dateAsString(date)
+    else:
+        errmsg = '"date_obj_to_match" is an unsupported type : %s'
+        raise TypeError, errmsg % str(type(date_obj_to_match))
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -351,4 +400,26 @@ def timeSpanToIntervals(start_time, end_time, time_unit, units_per_interval=1,
             _time += delta
 
     return tuple(intervals)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+def yearFromDate(whatever):
+    """ Converts a tuple, list, int, long or string into a date string
+    with a consistent format, either "YYYYMMDD" or "YYYYMMDDHH" when
+    the hour is present.
+    """
+    if isinstance(whatever, (int,long))\
+    or (hasattr(whatever,'dtype') and whatever.dtype.kind == 'i'):
+        if whatever > 1800 and whatever < 9999: return whatever
+        return decodeIntegerDate(whatever)[0]
+    if isinstance(whatever, datetime.date):
+        return whatever.year
+    if isinstance(whatever, (list,tuple)):
+        return int(whatever[0])
+    if isinstance(whatever, basestring):
+        if len(whatever) == 4 and whatever.isdigit():
+            return int(whatever)
+        else: return dateStringToTuple(whatever)[0]
+    errmsg = 'Unsupported date value %s : %s'
+    raise ValueError, errmsg % (str(type(whatever)),str(whatever))
 

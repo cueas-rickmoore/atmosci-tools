@@ -89,6 +89,9 @@ class Hdf5DataReaderMixin:
     def hdfObjectKey(self, dot_path):
         return safeDataKey(dot_path).replace('.','/')
 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level data access
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _getData_(self, parent, dataset_name, **kwargs):
@@ -113,6 +116,9 @@ class Hdf5DataReaderMixin:
         # no indexes, return entire dataset
         else: return dataset.value
 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level dataset access
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _getDataset_(self, parent, dataset_name):
@@ -164,6 +170,9 @@ class Hdf5DataReaderMixin:
         """
         return self._getDataset_(parent, dataset_name).dtype
 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level file managemnt and attribute access
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _close_(self, data_file):
@@ -190,6 +199,9 @@ class Hdf5DataReaderMixin:
             print 'Unable to open file in mode %s : %s' % (mode, filepath)
             raise
 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level group access
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _getGroup_(self, parent, group_name):
@@ -215,6 +227,9 @@ class Hdf5DataReaderMixin:
         group = self._getGroup_(parent, group_name)
         return self._getObjectKeys_(group)
 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level object-agnostic information access
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _getObject_(self, parent, object_name):
@@ -225,11 +240,11 @@ class Hdf5DataReaderMixin:
             return parent[object_key]
         except KeyError as e:
             errmsg = "Hdf5 file does not have a data object named '%s'"
-            e.args = (errmsg % object_key,) + e.args
+            e.args = (errmsg % object_key, self.filepath) + e.args
             raise e
         except Exception as e:
             errmsg = "Error during attempt to access data object named '%s'"
-            e.args = (errmsg % object_key,) + e.args
+            e.args = (errmsg % object_key, self.filepath) + e.args
             raise e
 
     def _getObjectAttribute_(self, _object, attr_name, default=BOGUS_VALUE):
@@ -325,9 +340,10 @@ class Hdf5DataWriterMixin:
     """
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level dataset creation and change mangement
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _createDataset_(self, parent, dataset_name, numpy_array_or_shape,
-                              **kwargs):
+    def _createDataset_(self, parent, dataset_name, numpy_array, **kwargs):
         """ Creates a new dataset in the data file and returns a pointer to
         it. Raises IOError exception if the dataset already exists.
         """
@@ -346,22 +362,41 @@ class Hdf5DataWriterMixin:
         if 'created' not in attributes:
             attributes['created'] = self._timestamp_()
 
-        if 'fillvalue' in create_args:
-            if 'dtype' not in create_args:
-                errmsg = "'dtype' is required for empty or extendable datasets."
-                raise IOError, errmsg
+        dataset = parent.create_dataset(dataset_key, data=numpy_array,
+                                        **create_args)
 
-            shape = numpy_array_or_shape
-            dataset = parent.create_dataset(dataset_key, shape, **create_args)
-        
-        else: #TODO: need to have a better set of checks here
-            if 'dtype' not in create_args\
-            and numpy_array_or_shape.dtype == N.dtype(object):
-                create_args['dtype'] = h5py.new_vlen(str)
+        for attr_name, attr_value in attributes.items():
+            dataset.attrs[attr_name] = attr_value
 
-            dataset = parent.create_dataset(dataset_key,
-                                            data=numpy_array_or_shape,
-                                            **create_args)
+        return dataset
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _createEmptyDataset_(self, parent, dataset_name, shape, dtype,
+                                   **kwargs):
+        """ Creates an empty dataset in the data file and returns a pointer
+        to it. Raises IOError exception if the dataset already exists.
+        """
+        dataset_key = self.hdfObjectKey(dataset_name)
+        if dataset_key in parent.keys():
+            errmsg = "'%s' dataset already exists in current data file."
+            raise IOError, errmsg % dataset_name
+
+        create_args = { }
+        attributes = { }
+        for name in kwargs:
+            if name in DATASET_CREATE_ARGS:
+                create_args[safestring(name)] = safevalue(kwargs[name])
+            else: attributes[safestring(name)] = safevalue(kwargs[name])
+
+        if 'created' not in attributes:
+            attributes['created'] = self._timestamp_()
+
+        if dtype == N.dtype(object):
+             create_args['dtype'] = h5py.new_vlen(str)
+        else: create_args['dtype'] = dtype
+
+        dataset = parent.create_dataset(dataset_key, shape, **create_args)
 
         for attr_name, attr_value in attributes.items():
             dataset.attrs[attr_name] = attr_value
@@ -375,14 +410,28 @@ class Hdf5DataWriterMixin:
         """ Update a dataset in the data file. If the dataset does not exist,
         it is created. Returns a pointer to the dataset.
         """
-        dataset = self._getDataset_(parent, dataset_name)
         array_dimensions = len(numpy_array.shape)
+        dataset = self._getDataset_(parent, dataset_name)
+
+        # replace the entire dataset
+        if numpy_array.shape == dataset.shape:
+            indexes = ','.join([':' for dim in range(array_dimensions)])
+            update_string = 'dataset[%s] = numpy_array[%s]' % (indexes,indexes)
+            exec(update_string)
+            if attributes:
+                self._setObjectAttributes_(dataset, attributes)
+            return dataset
+
+        # update a portion of the dataset
+        # dimensions of new data must be compatible with dimensions of dataset
         dataset_dimensions = len(dataset.shape)
         if array_dimensions > dataset_dimensions:
-            errmsg = 'Cannot insert array of shape %s into dataset of shape %s'
+            errmsg = \
+                'Cannot insert array of shape %s into dataset of shape %s'
             raise IndexError, errmsg % (str(numpy_array.shape),
-                                        str(dataset.shape), indx)
+                                        str(dataset.shape))
 
+        # new data goes into multi-dimensional slice
         if 'indexes' in kwargs:
             index_strings = [ ]
             for indx in kwargs['indexes']:
@@ -391,46 +440,43 @@ class Hdf5DataWriterMixin:
                 else: index_strings.append(str(indx))
             subset = ','.join(index_strings)
             update_string = 'dataset[%s] = numpy_array' % subset
-            eval(update_string)
+            try:
+                exec(update_string)
+            except:
+                errmsg = \
+                    'Cannot insert %s array at [%s] in dataset of shape %s'
+                raise IndexError, errmsg % (str(numpy_array.shape), subset,
+                                            str(dataset.shape))
 
+            if attributes:
+                self._setObjectAttributes_(dataset, attributes)
+            return dataset
+
+        # new data replaces entire content slice at index in first dimension
         elif 'index' in kwargs:
             indx = kwargs['index']
             from_indexes = ','.join([':' for dim in range(array_dimensions)])
             from_array = 'numpy_array[%s]' % from_indexes
             if array_dimensions < dataset_dimensions:
-                indexes = ','.join([':' for dim in range(dataset_dimensions-1)])
+                indexes = \
+                    ','.join([':' for dim in range(dataset_dimensions-1)])
                 to_array = 'dataset[%d,%s]' % (int(indx), indexes)
                 update_string = 'dataset[%s] = numpy_array[%s]' % subset
-                eval(update_string)
+                exec(update_string)
+                if attributes:
+                    self._setObjectAttributes_(dataset, attributes)
+                return dataset
             else:
                 errmsg = 'Cannot insert %s array into %s dataset as index %d.'
                 raise IndexError, errmsg % (str(numpy_array.shape),
                                             str(dataset.shape), indx)
 
+        # no indexes passed, can't do anything with mismatched dimensions
         else:
-            if numpy_array.shape == dataset.shape:
-                indexes = ','.join([':' for dim in range(array_dimensions-1)])
-                update_string = 'dataset[%s] = numpy_array[%s]' % (indexes,
-                                                                   indexes)
-                eval(update_string)
-            elif numpy_array.shape < dataset.shape:
-                errmsg = 'Not enough information to insert %s array into %s dataset.'
-                raise IndexError, errmsg % (str(numpy_array.shape),
+            errmsg = \
+                'Not enough information to insert %s array into %s dataset.'
+            raise IndexError, errmsg % (str(numpy_array.shape),
                                             str(dataset.shape))
-
-        for attr_name, attr_value in attributes.items():
-            try:
-                dataset.attrs[safeDataKey(attr_name)] = safevalue(attr_value)
-            except Exception as e:
-                errmsg = "Could not set attribute '%s' to '%s' for dataset '%s'"
-                ds_name = dataset.name
-                if ds_name.startswith('/'): ds_name = ds_name[1:]
-                errmsg = errmsg % (attr_name, str(attr_value), ds_name)
-                e.args = (errmsg,) + e.args
-                raise
-
-        dataset.attrs['updated'] = self._timestamp_()
-        return dataset
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -445,7 +491,10 @@ class Hdf5DataWriterMixin:
     def _setDatasetAttributes_(self, parent, dataset_name, attr_dict):
         dataset = self._getDataset_(parent, dataset_name)
         self._setObjectAttributes_(dataset, attr_dict)
-    
+
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level file attribute change mangement
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _deleteFileAttribute_(self, data_file, attr_name):
@@ -460,6 +509,9 @@ class Hdf5DataWriterMixin:
         self.assertFileObject(data_file)
         self._setObjectAttributes_(data_file, attr_dict)
 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level group creation and change mangement
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _createGroup_(self, parent, group_name, **kwargs):
@@ -489,6 +541,9 @@ class Hdf5DataWriterMixin:
         group = self._getGroup_(parent, group_name)
         self._setObjectAttributes_(group, attr_dict)
 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # root-level object-agnotic creation and change mangement
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _deleteObject_(self, parent, object_name):

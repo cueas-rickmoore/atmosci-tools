@@ -5,9 +5,11 @@ import os
 
 import numpy as N
 
-from atmosci.utils.timeutils import asDatetime, dateAsInt
+from atmosci.utils.timeutils import asDatetime, asDatetimeDate
+from atmosci.utils.timeutils import dateAsInt, matchDateType
 
 from atmosci.hdf5.grid import Hdf5GridFileReader, Hdf5GridFileManager
+from atmosci.hdf5.grid import Hdf5GridFileBuilder
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -16,7 +18,24 @@ TIME_SPAN_ERROR += 'Either "date" OR "start_date" plus "end_date" are required.'
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class Hdf5DateGridMixin:
+class Hdf5DateGridReaderMixin(object):
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    
+    def getDataAtNode(self, dataset_name, lon, lat, start_date=None,
+                            end_date=None, **kwargs):
+        y, x = self.ll2index(lon, lat)
+        if start_date is None:
+            data = self.getDataset(dataset_name).value[:, y, x]
+        else:
+            if end_date is None:
+                indx = self._indexForDate(dataset_name, date)
+                data = self.getDataset(dataset_name).value[indx, y, x]
+            else:
+                start, end = \
+                self._indexesForDates(dataset_name, start_date, end_date)
+                data = self.getDataset(dataset_name).value[start:end, y, x]
+        return self._processDataOut(dataset_name, data, **kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -25,17 +44,32 @@ class Hdf5DateGridMixin:
         dataset = self.getDataset(dataset_name)
         return self._processDataOut(dataset_name, dataset[indx], **kwargs)
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def getDataSince(self, dataset_name, date, **kwargs):
         return self.getDateSlice(dataset_name, date, self.end_date, **kwargs)
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def getDataThru(self, dataset_name, date, **kwargs):
         return self.getDateSlice(dataset_name, self.start_date, date, **kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def getDateAttribute(self, object_path, attribute_name, default=None):
+        date = self.getObjectAttribute(object_path, attribute_name, default)
+        if date is not None: return asDatetimeDate(date)
+        return None
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def getDateSlice(self, dataset_name, start_date, end_date, **kwargs):
         start, end = self._indexesForDates(dataset_name, start_date, end_date)
         dataset = self.getDataset(dataset_name)
         data = self._dateSlice(dataset, start, end)
         return self._processDataOut(dataset_name, data, **kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def get3DSlice(self, dataset_name, start_date, end_date, min_lon, max_lon,
                          min_lat, max_lat, **kwargs):
@@ -46,20 +80,6 @@ class Hdf5DateGridMixin:
         self._slice3DDataset(dataset, start, end, min_y, max_y, min_x, max_x)
         return self._processDataOut(dataset_name, data, **kwargs)
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    
-    def getDateAtNode(self, dataset_name, lon, lat, start_date, end_date=None,
-                            **kwargs):
-        y, x = self.ll2index(lon, lat)
-        if end_date is None:
-            indx = self._indexForDate(dataset_name, date)
-            data = self.getDataset(dataset_name).value[indx, y, x]
-        else:
-            start, end = \
-            self._indexesForDates(dataset_name, start_date, end_date)
-            data = self.getDataset(dataset_name).value[start:end, y, x]
-        return self._processDataOut(dataset_name, data, **kwargs)
-
    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def indexFromDate(self, dataset_name, date):
@@ -67,6 +87,12 @@ class Hdf5DateGridMixin:
 
     def indexesFromDates(self, dataset_name, start_date, end_date):
         return self._indexesForDates(dataset_name, start_date, end_date)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setDateAttribute(self, object_path, attribute_name, date):
+        date_str = date.strftime('%Y-%m-%d')
+        self.setObjectAttribute(object_path, attribute_name, date_str)
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
@@ -85,7 +111,8 @@ class Hdf5DateGridMixin:
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _indexForDate(self, dataset_name, date):
-        return (asDatetime(date) - self.start_date).days
+        _date = matchDateType(date, self.start_date)
+        return (_date - self.start_date).days
 
     def _indexesForDates(self, dataset_name, start_date, end_date):
         start_index = self._indexForDate(dataset_name, start_date)
@@ -168,40 +195,15 @@ class Hdf5DateGridMixin:
     def _loadDataGridAttributes_(self):
         if hasattr(self, 'start_date') \
         and isinstance(self.start_date, basestring):
-            self.start_date = asDatetime(self.start_date)
+            self.start_date = asDatetimeDate(self.start_date)
         if hasattr(self, 'end_date') \
         and isinstance(self.end_date, basestring):
-            self.end_date = asDatetime(self.end_date)
+            self.end_date = asDatetimeDate(self.end_date)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class Hdf5DateGridFileReader(Hdf5DateGridMixin, Hdf5GridFileReader):
-    """ Provides read-only access to 3D gridded data in HDF5 files where
-    the first dimension is time, the 2nd dimension is rows and the 3rd
-    dimension is columns. Grids can contain any type of data. Indexing
-    based on Time/Latitude/Longitude is available. Time indexes may be
-    derived from date/time with earliest date at index 0. Row indexes
-    may be derived from Latitude coordinates with minimum Latitude at
-    row index 0. Columns indexes may be derived from Longitude
-    coordinates with minimum Longitude at column index 0.
-
-    Inherits all of the capabilities of Hdf5GridFileReader
-    """
-
-    def __init__(self, hdf5_filepath):
-        Hdf5GridFileReader.__init__(self, hdf5_filepath)
-
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-
-    def _loadManagerAttributes_(self):
-        Hdf5GridFileReader._loadManagerAttributes_(self)
-        self._loadDataGridAttributes_()
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-class Hdf5DateGridFileManager(Hdf5DateGridMixin, Hdf5GridFileManager):
+class Hdf5DateGridManagerMixin(Hdf5DateGridReaderMixin):
     """ Provides read/write access to 3D gridded data in HDF5 files where
     the first dimension is time, the 2nd dimension is rows and the 3rd
     dimension is columns. Grids can contain any type of data. Indexing
@@ -360,6 +362,50 @@ class Hdf5DateGridFileManager(Hdf5DateGridMixin, Hdf5GridFileManager):
                 else: # max_x >= dataset.shape[2]
                     dataset[start:, min_y:, min_x:] = data
 
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class Hdf5DateGridFileReader(Hdf5DateGridReaderMixin, Hdf5GridFileReader):
+    """ Provides read-only access to 3D gridded data in HDF5 files where
+    the first dimension is time, the 2nd dimension is rows and the 3rd
+    dimension is columns. Grids can contain any type of data. Indexing
+    based on Time/Latitude/Longitude is available. Time indexes may be
+    derived from date/time with earliest date at index 0. Row indexes
+    may be derived from Latitude coordinates with minimum Latitude at
+    row index 0. Columns indexes may be derived from Longitude
+    coordinates with minimum Longitude at column index 0.
+
+    Inherits all of the capabilities of Hdf5GridFileReader
+    """
+
+    def __init__(self, hdf5_filepath):
+        Hdf5GridFileReader.__init__(self, hdf5_filepath)
+
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+
+    def _loadManagerAttributes_(self):
+        Hdf5GridFileReader._loadManagerAttributes_(self)
+        self._loadDataGridAttributes_()
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class Hdf5DateGridFileManager(Hdf5DateGridManagerMixin, Hdf5GridFileManager):
+    """ Provides read/write access to 3D gridded data in HDF5 files where
+    the first dimension is time, the 2nd dimension is rows and the 3rd
+    dimension is columns. Grids can contain any type of data. Indexing
+    based on Time/Latitude/Longitude is available. Time indexes may be
+    derived from date/time with earliest date at index 0. Row indexes
+    may be derived from Latitude coordinates with minimum Latitude at
+    row index 0. Columns indexes may be derived from Longitude
+    coordinates with minimum Longitude at column index 0.
+
+    Inherits all of the capabilities of Hdf5GridFileManager
+    """
+
+    def __init__(self, hdf5_filepath, mode='r'):
+        Hdf5GridFileManager.__init__(self, hdf5_filepath, mode)
+
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
     def _loadManagerAttributes_(self):
@@ -369,41 +415,21 @@ class Hdf5DateGridFileManager(Hdf5DateGridMixin, Hdf5GridFileManager):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class Hdf5DateGridFileBuilder(Hdf5DateGridFileManager):
+class Hdf5DateGridFileBuilder(Hdf5DateGridManagerMixin, Hdf5GridFileBuilder):
     """ Creates a new HDF5 file with read/write access to 3D gridded data
     where the first dimension is time, the 2nd dimension is rows and the
     3rd dimension is columns.
 
-    Inherits all of the capabilities of Hdf5DateGridFileManager
+    Inherits all of the capabilities of Hdf5GridFileBuilder
     """
 
     def __init__(self, hdf5_filepath, start_date, end_date, lons, lats):
-        self._access_authority = ('r','a', 'w')
-        Hdf5DateGridFileManager.__init__(self, hdf5_filepath, 'w')
-        self.setFileAttribute('created', self.timestamp)
-
-        # capture longitude/latitude limits of grids
-        min_lon = N.nanmin(lons)
-        max_lon = N.nanmax(lons)
-        min_lat = N.nanmin(lats)
-        max_lat = N.nanmax(lats)
-
-        self.setFileAttributes(created=manager.timestamp,
-                               start_date=dateAsInt(start_date),
-                               end_date=dateAsInt(end_date),
-                               min_lon=min_lon, max_lon=max_lon,
-                               min_lat=min_lat, max_lat=max_lat)
-
-        # cache the lon/lat grids
-        self.createDataset('lon', lons)
-        self.setDatasetAttributes('lon', min=min_lon, max=max_lon)
-
-        self.createDataset('lat', lats)
-        self.setDatasetAttributes('lat', min=min_lat, max=max_lat)
-
-        # close the file to make sure everything got written
+        Hdf5GridFileBuilder.__init__(self, hdf5_filepath, lons, lats)
+        # set the time span for this file
+        self.setFileAttributes(start_date=dateAsInt(start_date),
+                               end_date=dateAsInt(end_date))
+        # close the file to make sure attributes are saved
         self.close()
-
         # reopen the file in append mode
         self.open(mode='a')
 

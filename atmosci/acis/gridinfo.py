@@ -5,9 +5,10 @@ GRID_DESCRIPTIONS = {
        '    hires' : 'ACIS station data interpolated with NOAA high res grid input',
           'interp' : 'ACIS station data interpolated to 30 arc second grid',
     'interpolated' : 'ACIS station data interpolated to 30 arc second grid',
-'nrccinterpolated' : 'ACIS station data interpolated to 30 arc second grid',
-      'nrccinterp' : 'ACIS station data interpolated to 30 arc second grid',
+            'nrcc' : 'ACIS station data interpolated to 30 arc second grid',
        'nrcchires' : 'ACIS station data interpolated with NOAA high res grid input',
+      'nrccinterp' : 'ACIS station data interpolated to 30 arc second grid',
+'nrccinterpolated' : 'ACIS station data interpolated to 30 arc second grid',
         'xrcmncep' : 'CRCM run using NCEP boundary conditions',
         'crcmccsm' : 'CRCM run using CCSM boundary conditions',
        'crcmcgcm3' : 'CRCM run using CGCM3 boundary conditions',
@@ -27,6 +28,7 @@ GRID_NAME_MAP = {  'acis' : 'NRCC Hi-Res',
                   'hires' : 'NRCC Hi-Res',
                  'interp' : 'NRCC Interpolated',
            'interpolated' : 'NRCC Interpolated',
+                   'nrcc' : 'NRCC Interpolated',
               'nrcchires' : 'NRCC Hi-Res',
              'nrccinterp' : 'NRCC Interpolated',
        'nrccinterpolated' : 'NRCC Interpolated',
@@ -45,13 +47,14 @@ GRID_NAME_MAP = {  'acis' : 'NRCC Hi-Res',
                 }
 
 GRID_NUMBER_MAP = { 'interp' :  1,
-                'nrccinterp' :  1,
               'interpolated' :  1,
+                      'nrcc' :  1,
+                'nrccinterp' :  1,
           'nrccinterpolated' :  1,
-                      'acis' :  2,
-                 'acishires' :  2, 
-                     'hires' :  2, 
-                 'nrcchires' :  2,  
+                      'acis' :  3,
+                 'acishires' :  3, 
+                     'hires' :  3, 
+                 'nrcchires' :  3,  
                   'crcmncep' :  4,
                   'crcmccsm' :  5, 
                  'crcmcgcm3' :  6,
@@ -72,7 +75,6 @@ GRID_KEY_MAP = dict(zip(GRID_NUMBERS,GRID_KEYS))
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def acisGridIdToKey(grid_id):
-    print 'acisGridIdToKey', grid_id, type(grid_id)
     if isinstance(grid_id, int):
         if grid_id in GRID_NUMBERS: return GRID_KEY_MAP[grid_id]
     elif isinstance(grid_id, basestring):
@@ -83,10 +85,10 @@ def acisGridIdToKey(grid_id):
         else:
             grid_key = grid_id.lower().replace(' ','')
             grid_key = grid_key.replace('+','').replace('-','')
+            if grid_key in GRID_KEYS: return grid_key
     else:
         ERRMSG = '%s is an unsupported type for "grid_id".'
         raise TypeError, ERRMSG % type(grid_id)
-    if grid_key in GRID_KEYS: return grid_key
 
     ERRMSG = '"%s" is not recognized as a supported ACIS grid.'
     raise ValueError, ERRMSG % grid_id 
@@ -100,5 +102,9 @@ def acisGridName(grid_id):
     return GRID_NAME_MAP[acisGridIdToKey(grid_id)]
 
 def acisGridNumber(grid_id):
+    if grid_id in GRID_NUMBERS: return grid_id
+    elif isinstance(grid_id, basestring) and grid_id.isdigit():
+        grid_num = int(grid_id)
+        if grid_num in GRID_NUMBERS: return grid_num
     return GRID_NUMBER_MAP[acisGridIdToKey(grid_id)]
 

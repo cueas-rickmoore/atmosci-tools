@@ -16,16 +16,15 @@ class Hdf5GridFileMixin:
 
     def getData(self, dataset_name, bounded=False, **kwargs):
         self.assertFileOpen()
-        if kwargs.get('bounded', False):
-            dataset = self.getDataset(dataset_name)
-            data = self._coordBoundsSubset(dataset)
-            return self._processDataOut(dataset_name, data, **kwargs)
-        else:
-            data = self._getData_(self._hdf5_file_, dataset_name, **kwargs)
-            return self._processDataOut(dataset_name, data, **kwargs)
+        data = self._getData_(self.file, dataset_name, **kwargs)
+        if kwargs.get('raw',False): return data
+        return self._processDataOut(dataset_name, data, **kwargs)
 
     def getDataInBounds(self, dataset_name, **kwargs):
+        self.assertFileOpen()
         dataset = self.getDataset(dataset_name)
+        data = self._coordBoundsSubset(dataset)
+        if kwargs.get('raw',False): return data
         return self._processDataOut(dataset_name, data, **kwargs)
 
     def get2DSlice(self, dataset_name, min_lon, max_lon, min_lat, max_lat,
@@ -34,6 +33,7 @@ class Hdf5GridFileMixin:
         max_y, max_x = self.ll2index(max_lon, max_lat)
         dataset = self.getDataset(dataset_name)
         data = self._slice2DDataset(dataset, min_y, max_y, min_x, max_x)
+        if kwargs.get('raw',False): return data
         return self._processDataOut(dataset_name, data, **kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -54,10 +54,10 @@ class Hdf5GridFileMixin:
     def getIndexBounds(self):
         """ Returns a tuple containg the minimum and maximum x and y indexes
         """
-        if self._index_bbox is None:
+        if self._index_bounds is None:
             return (self._min_avail_y, self._max_avail_y,
                     self._min_avail_x, self._max_avail_x)
-        else: return self._index_box
+        else: return self._index_bounds
 
     def getCoordinateLimits(self):
         limits = { }
@@ -103,16 +103,18 @@ class Hdf5GridFileMixin:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def setCoordinateBounds(self, point_or_bbox):
+    def setCoordinateBounds(self, point_or_bbox, tolerance=None):
         if len(point_or_bbox) == 2:
-            self._lon_lat_bounds = None
+            self._coord_bounds = None
             self._y, self._x = self.ll2index(*point_or_bbox)
             self._index_bounds = None
         elif len(point_or_bbox) == 4:
-            self._lon_lat_bounds = tuple(point_or_bbox)
-            y1, x1 = self.ll2index(*point_or_bbox[:2])
-            y2, x2 = self.ll2index(*point_or_bbox[2:])
-            self._index_bounds = (y1, x1+1, y2, x2+1)
+            self._coord_bounds = tuple(point_or_bbox)
+            lon, lat = point_or_bbox[:2]
+            y1, x1 = self._indexOfClosestNode(lon, lat, tolerance)
+            lon, lat = point_or_bbox[2:]
+            y2, x2 = self._indexOfClosestNode(lon, lat, tolerance)
+            self._index_bounds = (y1, x1, y2+1, x2+1)
             self._y = None
             self._x = None
         else:
@@ -128,7 +130,7 @@ class Hdf5GridFileMixin:
             self._y = point_or_bbox[0]
             self._x = point_or_bbox[1]
             self._index_bounds = None
-            self._lon_lat_bounds = None
+            self._coord_bounds = None
         elif len(point_or_bbox) == 4:
             min_y = point_or_bbox[0]
             min_x = point_or_bbox[1]
@@ -137,7 +139,7 @@ class Hdf5GridFileMixin:
             self._index_bounds = (min_y, max_y, min_x, max_x)
             min_lon, min_lat = self.index2ll(*point_or_bbox[:2])
             max_lon, max_lat = self.index2ll(*point_or_bbox[2:])
-            self._lon_lat_bounds = (min_lon, min_lat, max_lon, max_lat)
+            self._coord_bounds = (min_lon, min_lat, max_lon, max_lat)
             self._y = None
             self._x = None
         else:
@@ -155,7 +157,7 @@ class Hdf5GridFileMixin:
 
     def unsetGridBounds(self):
         self._index_bounds = None
-        self._lon_lat_bounds = None
+        self._coord_bounds = None
         self._y = None
         self._x = None
 
@@ -165,8 +167,8 @@ class Hdf5GridFileMixin:
         """ Returns a subset of a grid that is within the grid manager's
         lon/lat bounding box. Grid shape must be [y, x].
         """
-        if self._index_bbox is not None:
-            min_y, max_y, min_x, max_x = self._index_bbox
+        if self._index_bounds is not None:
+            min_y, min_x, max_y, max_x = self._index_bounds
 
             if max_y < dataset.shape[0]:
                 if max_x < dataset.shape[1]:
@@ -186,26 +188,61 @@ class Hdf5GridFileMixin:
         # asking for the whole dataset
         return dataset.value
 
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _indexOfClosestNode(self, target_lon, target_lat):
+    def _indexOfClosestNode(self, target_lon, target_lat, tolerance=None):
         # "closeness" is dependent on the projection and grid spacing of
         # the data ... this implementation is decent for grids in the
         # continental U.S. with small node spacing (~ 5km or less) such
         # as the ACIS 5 km Lambert Conformal grids supplied by NRCC.
         # It should really be implemented in a subclass using a method
         # that is specific to the grid type in use.
-        radius = self.node_search_radius
-        indexes = N.where( (self.lons >= (target_lon - radius)) &
-                           (self.lons <= (target_lon + radius)) &
-                           (self.lats >= (target_lat - radius)) &
-                           (self.lats <= (target_lat + radius)) )
 
+        # try for anexact fit
+        indexes = N.where( (self.lons == target_lon) &
+                           (self.lats == target_lat) )
+        if len(indexes[0]) > 0:
+            return indexes[0][0], indexes[1][0]
+
+        # search using user-requested tolerance
+        if tolerance is not None:
+            # first try to find a uique node within the tolerance
+            indexes = N.where( (self.lons >= (target_lon - tolerance)) &
+                               (self.lons <= (target_lon + tolerance)) )
+            unique_lons = N.unique(self.lons[indexes])
+
+            indexes = N.where( (self.lats >= (target_lat - tolerance)) &
+                               (self.lats <= (target_lat + tolerance)) )
+            unique_lats = N.unique(self.lats[indexes])
+            if len(unique_lons) == 1 and len(unique_lats) == 1:
+                indexes = N.where( (self.lons == unique_lons[0]) &
+                                   (self.lats == unique_lats[0]) )
+                return indexes[0][0], indexes[1][0]
+
+            # no unique node witin tolerance, find any within tolerance 
+            indexes = N.where( (self.lons >= (target_lon - tolerance)) &
+                               (self.lons <= (target_lon + tolerance)) &
+                               (self.lats >= (target_lat - tolerance)) &
+                               (self.lats <= (target_lat + tolerance)) )
+            if len(indexes[0]) > 0:
+                return indexes[0][0], indexes[1][0]
+
+        # search using radius specified in the file attributes
+        else:
+            radius = self.node_search_radius
+            indexes = N.where( (self.lons >= (target_lon - radius)) &
+                               (self.lons <= (target_lon + radius)) &
+                               (self.lats >= (target_lat - radius)) &
+                               (self.lats <= (target_lat + radius)) )
+
+        # find node that is least distance from target coordinates
         distances = \
         self.distanceBetweenNodes(self.lons[indexes], self.lats[indexes],
                                   target_lon, target_lat)
         indx = N.where(distances == distances.min())[0][0]
         return indexes[0][indx], indexes[1][indx]
+
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -215,12 +252,18 @@ class Hdf5GridFileMixin:
         """
         # initialize grid coordinate and index bounds to None
         self._lon_lat_bbox = None
-        self._index_bbox = None
+        self._index_bounds = None
 
         # get lon/lat grids and capture grid limits
         try:
-            self.lons = self.getData('lon')
-            self.lats = self.getData('lat')
+            if self.hasDataset('lon'):
+                lat_ds_name = 'lat'
+                lon_ds_name = 'lon'
+            elif self.hasDataset('lons'):
+                lat_ds_name = 'lats'
+                lon_ds_name = 'lons'
+            self.lats = self.getData(lat_ds_name, raw=True)
+            self.lons = self.getData(lon_ds_name, raw=True)
         except:
             self._min_avail_lat = None
             self._max_avail_lat = None
@@ -232,8 +275,8 @@ class Hdf5GridFileMixin:
             self._min_avail_y = None
             self._max_avail_y = None
 
-            self.lons = None
             self.lats = None
+            self.lons = None
         else:
             # capture lat/lon limits
             self._min_avail_lat = N.nanmin(self.lats)
@@ -246,9 +289,6 @@ class Hdf5GridFileMixin:
             self._max_avail_x = self.lons.shape[1]
             self._min_avail_y = 0
             self._max_avail_y = self.lons.shape[0]
-
-            # set the default search radius
-            self._setDefaultSearchRadius_()
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -284,27 +324,32 @@ class Hdf5GridFileMixin:
 
     def _loadGridFileAttributes_(self):
         Hdf5FileReader._loadManagerAttributes_(self)
-        self._initCoordinateLimits()
         self.unsetGridBounds()
+        self._initCoordinateLimits()
+        self._loadGridExtentAttributes_()
+
+    def _loadGridExtentAttributes_(self):
         if self.lats is not None:
             self.grid_shape = self.lats.shape
             self.grid_size = self.lats.size
         else:
             self.grid_shape = ()
             self.grid_size = -32768
- 
-        if ( not hasattr(self, 'node_search_radius')
-             or self.node_search_radius is None ) and self.lats is not None:
+
+        if not hasattr(self, 'node_search_radius') \
+        or self.node_search_radius is None:
             self._setDefaultSearchRadius_()
+
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _setDefaultSearchRadius_(self):
-        lat_diff = (self.lats[1] - self.lats[0])
-        lon_diff = (self.lons[1] - self.lons[0])
-        # 55% of distance between farthest nodes in a single grid rectangle
-        self.node_search_radius = N.sqrt(lat_diff**2. + lon_diff**2.) * 0.55
-
+        if self.lats is not None:
+            lat_diff = N.nanmax(self.lats[1:,:] - self.lats[:-1,:])
+            lon_diff = N.nanmax(self.lons[:,1:] - self.lons[:,:-1])
+            # 55% of distance between farthest nodes in a single grid rectangle
+            self.node_search_radius = N.sqrt(lat_diff**2. + lon_diff**2.) * 0.55
+        else: self.node_search_radius = None
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -367,8 +412,8 @@ class Hdf5GridFileManager(Hdf5FileManager, Hdf5GridFileMixin):
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
     def _insertDataInBounds(dataset_name, dataset, data):
-        if self._index_bbox is not None:
-            min_y, max_y, min_x, max_x = self._index_bbox
+        if self._index_bounds is not None:
+            min_y, max_y, min_x, max_x = self._index_bounds
 
             if max_y < dataset.shape[0]:
                 if max_x < dataset.shape[1]:
@@ -428,25 +473,43 @@ class Hdf5GridFileBuilder(Hdf5GridFileManager):
         Hdf5GridFileManager.__init__(self, hdf5_filepath, 'w')
         self.setFileAttribute('created', self.timestamp)
 
+        # create and initialize coordinate datasets
+        if lons is not None and lats is not None:
+            self.initLonLatData(lons, lats)
+        
+        # reopen the file in append mode
+        self.open(mode='a')
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def initLonLatData(self, lons, lats, **kwargs):
         min_lon = N.nanmin(lons)
         max_lon = N.nanmax(lons)
         min_lat = N.nanmin(lats)
         max_lat = N.nanmax(lats)
 
+        self.open(mode='a')
         # capture latitude grid limits
         self.setFileAttributes(min_lon=min_lon, max_lon=max_lon,
                                min_lat=min_lat, max_lat=max_lat)
-
-        # cache the lon/lat grids
-        self.createDataset('lon', lons)
-        self.setDatasetAttributes('lon', min=min_lon, max=max_lon)
-
-        self.createDataset('lat', lats)
-        self.setDatasetAttributes('lat', min=min_lat, max=max_lat)
-
-        # close the file to make sure everything got written
+        # close the file to make sure attributes are saved
         self.close()
 
-        # reopen the file in append mode
         self.open(mode='a')
+        if not self.hasDataset('lon'):
+            self.createDataset('lon', lons, min=min_lon, max=max_lon, **kwargs)
+        else:
+            self.updateDataset('lon', lons)
+            self.setDatasetAttributes('lon', min=min_lon, max=max_lon, **kwargs)
+        # close the file to make sure everything are saved
+        self.close()
+
+        self.open(mode='a')
+        if not self.hasDataset('lat'):
+            self.createDataset('lat', lats, min=min_lat, max=max_lat, **kwargs)
+        else:
+            self.updateDataset('lat', lats)
+            self.setDatasetAttributes('lat', min=min_lat, max=max_lat, **kwargs)
+        # close the file to make sure everything are saved
+        self.close()
 
