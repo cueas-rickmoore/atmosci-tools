@@ -2,6 +2,7 @@
 import datetime
 from copy import copy
 
+#from dateutil.parser import parse as dateParser
 from dateutil.relativedelta import relativedelta
 ONE_DAY = relativedelta(days=1)
 import pytz
@@ -322,7 +323,7 @@ def dateStringToTuple(whatever, need_time=False):
     the hour is present.
     """
     if not isinstance(whatever, basestring):
-        raise TypeError, 'Unsupported type for dte string : %s' % type(whatever)
+        raise TypeError, 'Unsupported type for date string : %s' % type(whatever)
 
     if whatever.isdigit():
         string_len = len(whatever)
@@ -337,32 +338,49 @@ def dateStringToTuple(whatever, need_time=False):
         else:
             errmsg = 'Unable to parse date string : %s'
             raise ValueError, errmsg % whatever
-    else:
-        if '-' in whatever: parts = whatever.split('-')
-        elif '/' in whatever: parts = whatever.split('/')
-        elif '.' in whatever: parts = whatever.split('.')
-        else:
-            errmsg = 'Unable to parse date string : %s'
-            raise ValueError, errmsg % whatever
+    else: date = parseDateString(whatever, need_time)
 
-        if len(parts) == 3:
-            date = [int(parts[0]), int(parts[1])]
-            if ':' in parts[2]:
-                 day_and_time = [int(part) for part in parts[2].split(':')]
-                 date.extend(day_and_time)
-            else:
-                date.append(int(parts[2]))
-        else:
-            errmsg = 'Unable to parse date string : %s'
-            raise ValueError, errmsg % whatever
-
+    len_date = len(date)
     if need_time:
-        len_date = len(date)
         if len_date < 4: date.extend([0,0,0])
         elif len_date < 5: date.extend([0,0])
         elif len_date < 6: date.append(0)
-        return tuple(date)
-    else: return tuple(date[:3])
+    else:
+        if len_date > 3: date = date[:3]
+    return tuple(date)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+#def parseDateString(date_str, need_time=False):
+#    date = dateParser(date_str).timetuple()
+#    if need_time: return date
+#    else: return date[:3]
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+def parseDateString(date_str, need_time=False):
+    if 'T' in date_str: # date_str is an ISO string
+        date_, time_ = date_str.split('T')
+        if '-' in date_: parts = date_.split('-')
+        elif '/' in date_: parts = date_.split('/')
+        elif '.' in date_: parts = date_.split('.')
+        else:
+            errmsg = 'Unable to parse date string : %s'
+            raise ValueError, errmsg % date_str
+        if need_time: parts.extend(time_.split(':'))
+    else: # date_str is NOT an ISO string#
+        if '-' in date_str: parts = date_str.split('-')
+        elif '/' in date_str: parts = date_str.split('/')
+        elif '.' in date_str: parts = date_str.split('.')
+        else:
+            errmsg = 'Unable to parse date string : %s'
+            raise ValueError, errmsg % date_str
+        if ':' in parts[2]:
+            day_and_time = [part for part in parts[2].split(':')]
+            parts[2] = day_and_time[0]
+            if need_time: parts.extend(day_and_time[1:])
+
+    return [int(part) for part in parts]
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

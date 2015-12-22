@@ -41,6 +41,15 @@ class ConfigIterator(object):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+class ConfigMap(dict):
+
+    def __init__(self, mapping_dict):
+        for name, value in mapping_dict.items():
+            self[name] = value
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 class ConfigObject(object):
 
     def __init__(self, name, parent, *children, **kwargs):
@@ -108,10 +117,10 @@ class ConfigObject(object):
         if self.parent is not None:
             me['parent'] = self.parent.name
         else: me['parent'] = None
-        if self.has_children:
-            me['children'] = dict(self.items())
         if self.hasAttributes():
             me['attributes'] = dict(self.attritems())
+        for name, child in self.items():
+            me[name] = child.asDict()
         return me
     dict = property(asDict)
 
@@ -121,7 +130,7 @@ class ConfigObject(object):
     def copy(self, new_name=None, parent=None):
         if new_name is None: name = self.name
         else: name = new_name
-        _copy = self._complete_copy_(ConfigObject(name, None))
+        _copy = self._complete_copy_(self.__class__(name, None))
         if parent is not None: # copying entire config tree
             parent.addChild(_copy)
         return _copy
@@ -440,6 +449,8 @@ class ConfigObject(object):
             for _key, _value in value.items():
                 child.__dict__['__ATTRIBUTES__'][_key] = _value
             self.addChild(child)
+        elif isinstance(value, ConfigMap):
+            self.__dict__['__ATTRIBUTES__'][key] = value
         elif isinstance(value, dict):
             child = ConfigObject(key, None)
             for _key, _value in value.items():
@@ -518,7 +529,8 @@ class ConfigObject(object):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def __contains__(self, key):
-        return key in self.__dict__['__CHILDREN__'].keys()
+        contains = key in self.__dict__['__CHILDREN__'].keys() 
+        return contains or key in self.__dict__['__ATTRIBUTES__'].keys()
 
     def __delitem__(self, path):
         self._delete_tree_(self._path_to_list_(path))
@@ -649,14 +661,6 @@ class OrderedConfigObject(ConfigObject):
             me['attributes'] = OrderedDict(self.attritems())
         return me
     dict = property(asDict)
-
-    def copy(self, new_name=None, parent=None):
-        if new_name is None: name = self.name
-        else: name = new_name
-        _copy = self._complete_copy_(OrderedConfigObject(name, None))
-        if parent is not None: # copying entire config tree
-            parent.addChild(_copy)
-        return _copy
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # iterators over attributes
