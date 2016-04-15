@@ -1,6 +1,6 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
-# Copyright (c) 2007-2015 Rick Moore and Cornell University Atmospheric
+# Copyright (c) 2007-2016 Rick Moore and Cornell University Atmospheric
 #                         Sciences
 # All Rights Reserved
 #

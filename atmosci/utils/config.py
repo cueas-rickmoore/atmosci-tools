@@ -1,5 +1,6 @@
 
 from collections import OrderedDict
+from copy import deepcopy
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -329,19 +330,21 @@ class ConfigObject(object):
 
         for key, value in self.__dict__['__ATTRIBUTES__'].items():
             if isinstance(value, tuple):
-                _copy.__dict__['__ATTRIBUTES__'][key] = tuple([x for x in value])
+                #_copy.__dict__['__ATTRIBUTES__'][key] = tuple([x for x in value])
+                _copy.__dict__['__ATTRIBUTES__'][key] = deepcopy(value)
             elif isinstance(value, list):
-                _copy.__dict__['__ATTRIBUTES__'][key] = [x for x in value]
+                #_copy.__dict__['__ATTRIBUTES__'][key] = [x for x in value]
+                _copy.__dict__['__ATTRIBUTES__'][key] = deepcopy(value)
             elif isinstance(value, OrderedDict):
                 _copy.__dict__['__ATTRIBUTES__'][key] =\
-                      OrderedDict(tuple(OrderedDict.items()))
+                      OrderedDict(deepcopy(tuple(OrderedDict.items())))
             elif isinstance(value, ConfigObject):
                 _copy.__dict__['__ATTRIBUTES__'][key] = value.copy(parent=self)
-            else: _copy.__dict__['__ATTRIBUTES__'][key] = value
+            else: _copy.__dict__['__ATTRIBUTES__'][key] = deepcopy(value)
 
         for key in self.__dict__.keys():
             if key not in obj_dict_keys:
-                _copy.__dict__[key] = self.__dict__[key]
+                _copy.__dict__[key] = deepcopy(self.__dict__[key])
 
         return _copy
 
