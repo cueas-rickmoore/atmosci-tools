@@ -32,29 +32,43 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getDataForTime(self, dataset_path, time_obj, lon=None, lat=None,
-                             **kwargs):
+    def dateAttributes(self, dataset_path, convert=False):
+        dates = { }
+        attrs = self.datasetAttributes(dataset_path)
+        if convert:
+            for key in attrs:
+                if key.endswith('date'): dates[key] = datetime.date(attrs[key])
+        else:
+            for key in attrs:
+                if key.endswith('date'): dates[key] = attrs[key]
+        return dates
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def dataForTime(self, dataset_path, time_obj, lon=None, lat=None,
+                          **kwargs):
         time_indx = self._timeToIndex(dataset_path, time_obj)
         if lon is not None:
             y, x = self.ll2index(lon, lat)
             data = self._extractByTimeAtNode(dataset_path, time_indx, x, y)
         else: data = self._extractByTimeIndex(dataset_path, time_indx)
         return self._processDataOut(dataset_path, data, **kwargs)
+    getDataForTime = dataForTime
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getSliceAtNode(self, dataset_path, start_time_obj, end_time_obj,
-                             lon, lat, **kwargs):
+    def sliceAtNode(self, dataset_path, start_time_obj, end_time_obj,
+                          lon, lat, **kwargs):
         sindx, eindx = \
         self._timesToIndexes(dataset_path, start_time_obj, end_time_obj)
         y, x = self.ll2index(lon, lat)
         data = self._extractSliceAtNode(dataset_path, sindx, eindx, x, y)
         return self._processDataOut(dataset_path, data, **kwargs)
+    getSliceAtNode = sliceAtNode
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getTimeSlice(self, dataset_path, start_time_obj, end_time_obj,
-                          **kwargs):
+    def timeSlice(self, dataset_path, start_time_obj, end_time_obj, **kwargs):
         if end_time_obj is not None:
             start_indx, end_indx = \
             self._timesToIndexes(dataset_path, start_time_obj, end_time_obj)
@@ -63,6 +77,7 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
             time_indx = self._timeToIndex(dataset_path, start_time_obj)
             data = self._extractByTimeIndex(dataset_path, time_indx)
         return self._processDataOut(dataset_path, data, **kwargs)
+    getTimeSlice = timeSlice
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -471,18 +486,6 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
         self._loadDatasetAttrs_()
         self._postLoadFileAttrs_()
 
-    def _postInitProject_(self, **kwargs):
-        pass
-
-    def _postLoadFileAttrs_(self):
-        pass
-
-    def _preInitProject_(self, registry, **kwargs):
-        self.registry = registry.copy()
-        self._dataset_names = [ ]
-        self._datasets_ = { }
-        self._unpackers = { }
-
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -667,6 +670,12 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
         dataset[start_index:end_index] = provenance
 
         return prov_path
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    #@property
+    #def timestamp(self):
+    #    return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

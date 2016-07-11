@@ -8,6 +8,7 @@ import h5py
 import numpy as N
 from atmosci.utils.data import safedict, dictToWhere, listToWhere
 from atmosci.utils.timeutils import asDatetime
+from atmosci.utils.units import convertUnits
 
 from atmosci.hdf5.mixin import Hdf5DataReaderMixin, Hdf5DataWriterMixin
 
@@ -142,63 +143,71 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getData(self, dataset_name, **kwargs):
+    def getData(self, dataset_path, **kwargs):
         self.assertFileOpen()
-        data = self._getData_(self.file, dataset_name, **kwargs)
-        return self._processDataOut(dataset_name, data, **kwargs)
+        data = self._getData_(self.file, dataset_path, **kwargs)
+        return self._processDataOut(dataset_path, data, **kwargs)
 
-    def getDataWhere(self, dataset_name, criteria=None, **kwatgs):
+    def getDataWhere(self, dataset_path, criteria=None, **kwatgs):
         datasets = [ ]
         if criteria:
             indexes = self._where(criteria)
             if indexes and len(indexes[0]) > 0:
-                return self.getData(dataset_name, indexes=indexes, **kwargs)
+                return self.getData(dataset_path, indexes=indexes, **kwargs)
             else:
                 errmsg = 'No entries meet search criteria : %s'
                 raise ValueError, errmsg % str(criteria)
-        return self.getData(dataset_name, **kwargs)
+        return self.getData(dataset_path, **kwargs)
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def datasetExists(self, dataset_name):
-        return dataset_name in self._dataset_names
+    def datasetExists(self, dataset_path):
+        return dataset_path in self._dataset_names
     hasDataset = datasetExists
 
-    def datasetExistsIn(self, dataset_name, parent_name):
+    def datasetExistsIn(self, dataset_path, parent_name):
         if parent_name == '__file__':
-            return dataset_name in self._dataset_names
+            return dataset_path in self._dataset_names
         else:
             self.assertFileOpen()
             return datast_name in self._getDatasetKeys_(parent_name)
 
-    def datasetHasAttribute(self, dataset_name, attr_name):
+    def datasetHasAttribute(self, dataset_path, attr_name):
         self.assertFileOpen()
-        dataset_attrs = self._getDatasetAttributes_(self.file, dataset_name)
+        dataset_attrs = self._getDatasetAttributes_(self.file, dataset_path)
         return attr_name in dataset_attrs.keys()
     datasetHasAttr = datasetHasAttribute
 
-    def getDataset(self, dataset_name):
+    def dataset(self, dataset_path):
         self.assertFileOpen()
-        return self._getDataset_(self.file, dataset_name)
+        return self._getDataset_(self.file, dataset_path)
+    getDataset = dataset
 
-    def getDatasetAttribute(self, dataset_name, attr_name, default=BOGUS_VALUE):
+    def datasetAttribute(self, dataset_path, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
-        parent = self.file
-        attr_value = self._getDatasetAttribute_(parent, dataset_name, 
-                                                attr_name, default)
-        return attr_value
+        return self._getDatasetAttribute_(self.file, dataset_path, attr_name,
+                                          default)
+    getDatasetAttribute = datasetAttribute
 
-    def getDatasetAttributes(self, dataset_name):
+    def datasetAttributes(self, dataset_path):
         self.assertFileOpen()
-        return self._getDatasetAttributes_(self.file, dataset_name)
-    getDatasetAttrs = getDatasetAttributes
+        return self._getDatasetAttributes_(self.file, dataset_path)
+    getDatasetAttrs = datasetAttributes
+    getDatasetAttributes = datasetAttributes
 
-    def getDatasetShape(self, dataset_name):
-        return self.getDataset(dataset_name).shape
+    def datasetShape(self, dataset_path):
+        return self.dataset(dataset_path).shape
+    getDatasetShape = datasetShape
 
-    def getDatasetType(self, dataset_name):
-        return self.getDataset(dataset_name).dtype
+    def datasetType(self, dataset_path):
+        return self.dataset(dataset_path).dtype
+    getDatasetType = datasetType
+
+    def datasetUnits(self, dataset_path, default=BOGUS_VALUE):
+        return self._getDatasetAttribute_(self.file, dataset_path, 'units',
+                                          default)
+    getDatasetUnits = datasetUnits
 
     def listDatasets(self):
         return self.listDatasetsIn('__file__')
@@ -226,21 +235,24 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         return attr_name in self._getFileAttributes_(self.file).keys()
     fileHasAttr = fileHasAttribute
 
-    def getFileAttribute(self, attr_name, default=BOGUS_VALUE):
+    def fileAttribute(self, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
         return self._getFileAttribute_(self.file, attr_name, default)
+    getFileAttribute = fileAttribute
 
-    def getFileAttributes(self):
+    def fileAttributes(self):
         self.assertFileOpen()
         return self._getFileAttributes_(self.file)
+    getFileAttributes = fileAttributes
 
-    def getFileHierarchy(self, grouped=False):
+    def fileHierarchy(self, grouped=False):
         if grouped:
             groups, datasets =\
             self._getObjectHierarchy_(self.file, '.', True)
             return (tuple(groups), tuple(datasets))
         else:
             return tuple(self._getObjectHierarchy_(self.file, '.'))
+    getFileHierarchy = fileHierarchy
 
     def open(self, mode='r'):
         if mode not in self._access_authority:
@@ -254,20 +266,23 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getGroup(self, group_name):
+    def group(self, group_name):
         self.assertFileOpen()
         _object = self._getGroup_(self.file, group_name)
         return _object
+    getGroup = group
 
-    def getGroupAttribute(self, group_name, attr_name, default=BOGUS_VALUE):
+    def groupAttribute(self, group_name, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
         attr_value = self._getGroupAttribute_(self.file, group_name,
                                               attr_name, default)
-        return attr_value 
+        return attr_value
+    getGroupAttribute = groupAttribute
 
-    def getGroupAttributes(self, group_name):
+    def groupAttributes(self, group_name):
         self.assertFileOpen()
         return self._getGroupAttributes_(self.file, group_name)
+    getGroupAttributes = groupAttributes
 
     def groupExists(self, group_name, parent_name=None):
         if parent_name in('__file__', None):
@@ -281,9 +296,10 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         return attr_name in group_attrs.keys()
     groupHasAttr = groupHasAttribute
 
-    def getGroupHierarchy(self, group_name):
-        _object = self.getGroup(group_name)
+    def groupHierarchy(self, group_name):
+        _object = self.group(group_name)
         return tuple(self._getObjectHierarchy_(_object, '.'))
+    getGroupHierarchy = groupHierarchy
 
     def listGroups(self):
         return self.listGroupsIn('__file__')
@@ -303,23 +319,27 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         if object_name.lower() == '__file__': return self.file
         return self._getObject_(self.file, object_name)
 
-    def getObjectAttribute(self, object_name, attr_name, default=BOGUS_VALUE):
+    def objectAttribute(self, object_name, attr_name, default=BOGUS_VALUE):
         self.assertFileOpen()
         attr_value = self._getObjectAttribute_(self.getObject(object_name),
                                                attr_name, default)
-        return attr_value 
+        return attr_value
+    getObjectAttribute = objectAttribute
 
-    def getObjectAttributes(self, object_name):
+    def objectAttributes(self, object_name):
         self.assertFileOpen()
         return self._getObjectAttributes_(self.getObject(object_name))
+    getObjectAttributes = objectAttributes
 
-    def getObjectHierarchy(self, object_name):
+    def objectHierarchy(self, object_name):
         _object = self.getObject(object_name)
         return tuple(self._getObjectHierarchy_(_object, '.'))
+    getObjectHierarchy = objectHierarchy
 
-    def getObjectShape(self, object_name):
+    def objectShape(self, object_name):
         self.assertFileOpen()
         return self._getObjectShape_(self.getObject(object_name))
+    getObjectShape = objectShape
 
     def objectExists(self, object_name, parent_name=None):
         return object_name in self.listObjects(parent_name)
@@ -342,11 +362,11 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def registerDataPacker(dataset_name, function):
-        self._packers[dataset_name] = function
+    def registerDataPacker(dataset_path, function):
+        self._packers[dataset_path] = function
 
-    def registerDataUnpacker(dataset_name, function):
-        self._unpackers[dataset_name] = function
+    def registerDataUnpacker(dataset_path, function):
+        self._unpackers[dataset_path] = function
 
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
@@ -380,22 +400,51 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _processDataOut(self, dataset_name, data, **kwargs):
+    def _processDataOut(self, dataset_path, data, **kwargs):
         if kwargs.get('raw', False): return data
-        data = self._unpackData(dataset_name, data, **kwargs)
-        return self._postUnpack(dataset_name, data, **kwargs)
+        data = self._unpackData(dataset_path, data, **kwargs)
+        return self._postUnpack(dataset_path, data, **kwargs)
 
-    def _getUnpacker(self, dataset_name):
-        return self.unpackers.get(dataset_name,
+    def _getUnpacker(self, dataset_path):
+        return self.unpackers.get(dataset_path,
                                   self.unpackers.get('default', None))
 
-    def _postUnpack(self, dataset_name, data, **kwargs):
-        return data
+    def _postUnpack(self, dataset_path, data, **kwargs):
+        # check for units conversion
+        out_units = kwargs.get('units', None)
+        if out_units is None: return data
 
-    def _unpackData(self, dataset_name, data, **kwargs):
-        unpack = self._getUnpacker(dataset_name)
-        if unpack is None: return data
-        else: return unpack(data)
+        units = self.datasetAttribute(dataset_path, 'units', None)
+        if units is not None:
+            if out_units != units:
+                return convertUnits(data, units, out_units)
+        else:
+            errmsg = '"%s" dataset has no attribute named "units"'
+            raise AttributeError, errmsg % dataset_path
+
+    def _unpackData(self, dataset_path, data, **kwargs):
+        unpack = self._getUnpacker(dataset_path)
+        if unpack is not None: return unpack(data)
+
+        # check for some common data conversion options
+        out_missing = kwargs.get('missing',None)
+        missing = self.datasetAttribute(dataset_path, 'missing', None)
+        if out_missing is not None:
+            if missing is not None: indexes = N.where(data == missing)
+            else:
+                errmsg = '"%s" dataset has no attribute named "missing"'
+                raise AttributeError, errmsg % dataset_path
+
+        # check for change of data type (e.g. int -> float or float -> int)
+        out_dtype = kwargs.get('dtype', None)
+        if out_dtype is not None and out_dtype != data.dtype:
+            data = data.astype(out_dtype)
+
+        # always convert missing values AFTER type AND units changes
+        if out_missing is not None and out_missing != missing:
+            data[indexes] = out_missing
+
+        return data
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -525,19 +574,19 @@ class Hdf5FileManager(Hdf5DataWriterMixin, Hdf5FileReader):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def createDataset(self, dataset_name, numpy_array, **kwargs):
+    def createDataset(self, dataset_path, numpy_array, **kwargs):
         self.assertFileWritable()
 
-        name, parent = self._pathToNameAndParent(self.file, dataset_name)
+        name, parent = self._pathToNameAndParent(self.file, dataset_path)
         self._createEmptyDataset_(parent, name, numpy_array.shape, 
                                   numpy_array.dtype, **kwargs)
-        self._registerDatasetName(dataset_name)
+        self._registerDatasetName(dataset_path)
         dataset = self._updateDataset_(parent, name, 
-                      self._processDataIn(dataset_name, numpy_array, **kwargs), 
+                      self._processDataIn(dataset_path, numpy_array, **kwargs), 
                       {}, update_timestamp=False, **kwargs)
         return dataset
 
-    def createEmptyDataset(self, dataset_name, shape, dtype, fill_value=None,
+    def createEmptyDataset(self, dataset_path, shape, dtype, fill_value=None,
                                  **kwargs):
         self.assertFileWritable()
 
@@ -545,12 +594,12 @@ class Hdf5FileManager(Hdf5DataWriterMixin, Hdf5FileReader):
         if 'fillvalue' is not None:
             kwargs['fillvalue']  = fill_value
 
-        name, parent = self._pathToNameAndParent(self.file, dataset_name)
+        name, parent = self._pathToNameAndParent(self.file, dataset_path)
         dataset = self._createDataset_(parent, name, shape, **kwargs)
         self._registerDatasetName(dataset)
         return dataset
 
-    def createExtensibleDataset(self, dataset_name, initial_shape, max_shape,
+    def createExtensibleDataset(self, dataset_path, initial_shape, max_shape,
                                       dtype, fill_value, **kwargs):
         self.assertFileWritable()
 
@@ -558,7 +607,7 @@ class Hdf5FileManager(Hdf5DataWriterMixin, Hdf5FileReader):
         kwargs['fillvalue']  = fill_value
         kwargs['maxshape'] = max_shape
 
-        name, parent = self._pathToNameAndParent(self.file, dataset_name)
+        name, parent = self._pathToNameAndParent(self.file, dataset_path)
         dataset = self._createDataset_(parent, name, initial_shape, **kwargs)
         self._registerDatasetName(dataset)
         return dataset
@@ -566,50 +615,50 @@ class Hdf5FileManager(Hdf5DataWriterMixin, Hdf5FileReader):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def replaceDataset(self, dataset_name, data, attributes):
-        self.deleteDataset(dataset_name)
+    def replaceDataset(self, dataset_path, data, attributes):
+        self.deleteDataset(dataset_path)
         attributes['updated'] = self._timestamp_()
-        self.createDataset(dataset_name, data, attributes)
+        self.createDataset(dataset_path, data, attributes)
 
-    def resizeDataset(self, dataset_name, max_index):
+    def resizeDataset(self, dataset_path, max_index):
         self.assertFileOpen()
-        dataset = self.getDataset(dataset_name)
-        old_shape = self.file[dataset_name].shape
+        dataset = self.getDataset(dataset_path)
+        old_shape = self.file[dataset_path].shape
         new_size = (max_index,) + old_shape[1:]
-        self.file[dataset_name].resize(new_size)
+        self.file[dataset_path].resize(new_size)
 
-    def updateDataset(self, dataset_name, numpy_array, attributes={}, **kwargs):
+    def updateDataset(self, dataset_path, numpy_array, attributes={}, **kwargs):
         self.assertFileWritable()
         
-        name, parent = self._pathToNameAndParent(self.file, dataset_name)
+        name, parent = self._pathToNameAndParent(self.file, dataset_path)
         if name in self.dataset_names:
             dataset = self._updateDataset_(parent, name, 
-                      self._processDataIn(dataset_name, numpy_array, **kwargs), 
+                      self._processDataIn(dataset_path, numpy_array, **kwargs), 
                                           attributes, **kwargs)
         else:
-            dataset = self.createDataset(dataset_name, numpy_array,
+            dataset = self.createDataset(dataset_path, numpy_array,
                                          **attributes)
         return dataset
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def deleteDataset(self, dataset_name):
+    def deleteDataset(self, dataset_path):
         self.assertFileWritable()
-        self._deleteDataset_(self.file, dataset_name, attr_name)
+        self._deleteDataset_(self.file, dataset_path, attr_name)
 
-    def deleteDatasetAttribute(self, dataset_name, attr_name):
+    def deleteDatasetAttribute(self, dataset_path, attr_name):
         self.assertFileWritable()
-        self._deleteDatasetAttribute_(self.file, dataset_name, attr_name)
+        self._deleteDatasetAttribute_(self.file, dataset_path, attr_name)
 
-    def setDatasetAttribute(self, dataset_name, attr_name, attr_value):
+    def setDatasetAttribute(self, dataset_path, attr_name, attr_value):
         self.assertFileWritable()
-        self._setDatasetAttribute_(self.file, dataset_name,
+        self._setDatasetAttribute_(self.file, dataset_path,
                                   attr_name, attr_value)
 
-    def setDatasetAttributes(self, dataset_name, **kwargs):
+    def setDatasetAttributes(self, dataset_path, **kwargs):
         self.assertFileWritable()
-        self._setDatasetAttributes_(self.file, dataset_name, kwargs)
+        self._setDatasetAttributes_(self.file, dataset_path, kwargs)
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -681,7 +730,7 @@ class Hdf5FileManager(Hdf5DataWriterMixin, Hdf5FileReader):
 
     def deleteObject(self, object_name):
         self.assertFileWritable()
-        name, parent = self._pathToNameAndParent(self.file, dataset_name)
+        name, parent = self._pathToNameAndParent(self.file, object_name)
         self._deleteObject_(parent, object_name)
 
     def deleteObjectAttribute(self, object_name, attr_name):
@@ -699,20 +748,20 @@ class Hdf5FileManager(Hdf5DataWriterMixin, Hdf5FileReader):
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
-    def _processDataIn(self, dataset_name, data, **kwargs):
-        data = self._prePack(dataset_name, data, **kwargs)
-        return self._packData(dataset_name, data, **kwargs)
+    def _processDataIn(self, dataset_path, data, **kwargs):
+        data = self._prePack(dataset_path, data, **kwargs)
+        return self._packData(dataset_path, data, **kwargs)
 
-    def _getPacker(self, dataset_name):
-        return self.packers.get(dataset_name,
+    def _getPacker(self, dataset_path):
+        return self.packers.get(dataset_path,
                                 self.packers.get('default', None))
 
-    def _packData(self, dataset_name, data, **kwargs):
-        pack = self._getPacker(dataset_name)
+    def _packData(self, dataset_path, data, **kwargs):
+        pack = self._getPacker(dataset_path)
         if pack is None: return data
         else: return pack(data)
 
-    def _prePack(self, dataset_name, data, **kwargs):
+    def _prePack(self, dataset_path, data, **kwargs):
         return data
 
 

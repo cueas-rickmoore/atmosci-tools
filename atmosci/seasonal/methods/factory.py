@@ -13,28 +13,7 @@ from atmosci.utils.timeutils import timeSpanToIntervals, yearFromDate
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class BaseProjectFactory(object):
-    """ Base class containing functions common to all factory subclasses.
-    """
-
-    def __init__(self, config_object, registry_object=None):
-        self.config = config_object.copy()
-        self.project = self.config.project.copy()
-        if registry_object is not None:
-            self.registry = registry_object.copy()
-        else: self.registry = None
-
-        # allow override of targetYearFromDate() from project's config object
-        tyFunction = config_object.get('targetYearFromDate', None)
-        if tyFunction is not None:
-            self.targetYearFromDate = tyFunction
-
-        # initilaize file access managers
-        self._initFileManagerClasses_()
-
-        # simple hook for subclasses to initialize additonal attributes  
-        self.completeInitialization()
-
+class BasicProjectFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # configuration access functions 
@@ -53,12 +32,13 @@ class BaseProjectFactory(object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getDatasetConfig(self, dataset_key):
+    def datasetConfig(self, dataset_key):
         return self.config.datasets[dataset_key]
+    getDatasetConfig = datasetConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getFiletypeConfig(self, filetype_key):
+    def filetypeConfig(self, filetype_key):
         if '.' in filetype_key:
             filetype, source_key = filetype_key.split('.')
             ft_cfg = self.config.filetypes.get(filetype, None)
@@ -68,36 +48,42 @@ class BaseProjectFactory(object):
         else:
             ft_cfg = self.config.filetypes.get(filetype_key, None)
         return ft_cfg
+    getFiletypeConfig = filetypeConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getGroupConfig(self, group_key):
+    def groupConfig(self, group_key):
         return self.config.groups[group_key]
+    getGroupConfig = groupConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getProjectConfig(self):
+    def projectConfig(self):
         return self.config.project
+    getProjectConfig = projectConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getProvenanceConfig(self, provenance_key):
+    def provenanceConfig(self, provenance_key):
         return self.config.provenance[provenance_key]
+    getProvenanceConfig = provenanceConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getRegionConfig(self, region_key):
+    def regionConfig(self, region_key):
         return self.config.regions[region_key]
+    getRegionConfig = regionConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getRegistryConfig(self):
-        return self.registry
+    def registryConfig(self): return self.registry
+    getRegistryConfig = registryConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     
-    def getSourceConfig(self, source_key):
+    def sourceConfig(self, source_key):
         return self.config.sources[source_key]
+    getSourceConfig = sourceConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -114,24 +100,38 @@ class BaseProjectFactory(object):
     # date and time span utilities
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def dateInSeason(self, date):
+        year = self.targetYearFromDate(date)
+        start_date = self.seasonStartDate(year)
+        end_date = self.seasonEndDate(year)
+        return (date >= start_date and date <= end_date)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def listDatesBetween(self, start_date, end_date):
         if end_date is None: return (start_date,)
         else: return timeSpanToIntervals(start_date, end_date, 'day', 1)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def seasonEndDate(self, target_year, filetype):
-        season = self.config.filetypes[filetype].get('season',
-                                                     self.config.project)
+    def seasonConfig(self, filetype=None):
+        if filetype is None: return self.config.project
+        else: 
+            return self.config.filetypes[filetype].get('season',
+                                                       self.config.project)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def seasonEndDate(self, target_year, filetype=None):
+        season = self.seasonConfig(filetype)
         # end date is always in the target year
         return datetime.date(target_year, *season.end_day)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def seasonStartDate(self, target_year, filetype):
+    def seasonStartDate(self, target_year, filetype=None):
         # end day is always in the target year
-        season = self.config.filetypes[filetype].get('season',
-                                                     self.config.project)
+        season = self.seasonConfig(filetype)
         # if start month is later in the year than to end month,
         # start date is in the year previous to the target year
         if season.start_day[0] > season.end_day[0]:
@@ -141,14 +141,14 @@ class BaseProjectFactory(object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def targetYearFromDate(self, date):
-        end_day = self.config.filetypes[filetype].season.end_day
-        if date.month > end_day[0]: return date.year + 1
+    def targetYearFromDate(self, date, filetype=None):
+        season = self.seasonConfig(filetype)
+        if date.month > season.end_day[0]: return date.year + 1
         else: return date.year
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def targetDateSpan(self, year_or_date):
+    def targetDateSpan(self, year_or_date, filetpye=None):
         if isinstance(year_or_date, int):
             # input year is assumed to be the target year
             target_year = year_or_date
@@ -156,15 +156,15 @@ class BaseProjectFactory(object):
         elif isinstance(year_or_date, (tuple,list)):
             # input is a date tuple (year, month, day)
             target_year = \
-                self.targetYearFromDate(datetime.date(year_or_date))
+                self.targetYearFromDate(datetime.date(year_or_date), filetype)
 
-        elif isinstance(year_or_start_date, (datetime.datetime,datetime.date)):
+        elif isinstance(year_or_date, (datetime.datetime,datetime.date)):
             # year_or_start_date == datetime instance
-            target_year = self.targetYearFromDate(year_or_date)
+            target_year = self.targetYearFromDate(year_or_date, filetype)
 
         else:
-            errmsg = "Invalid type for 'year_or_start_date' argument : %s"
-            raise TypeError, errmsg % type(year_or_start_date)
+            errmsg = "Invalid type for 'year_or_date' argument : %s"
+            raise TypeError, errmsg % type(year_or_date)
 
         end_date = self.seasonEndDate(target_year)
         start_date = self.seasonStartDate(target_year)
@@ -177,6 +177,47 @@ class BaseProjectFactory(object):
             return datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         else: return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class BaseProjectFactory(BasicProjectFactoryMethods, object):
+    """ Base class containing functions common to all factory subclasses.
+    """
+
+    def __init__(self, config_object, registry_object=None, project=None):
+        self.config = config_object.copy()
+
+        if project is None:
+            self.project = self.config.project
+        elif isinstance(project, ConfigObject):
+            self.project = project.copy('project',None)
+        elif isinstance(project, basestring):
+            if projects in self.config:
+                proj = self.config.projects.get(project, None)
+                if proj is None:
+                    msg = '"%s" project not found in config.projects'
+                    raise AttributeError, msg % project
+                self.project = proj.copy()
+            else:
+                raise LookupError, '"projects" object not found in config'
+        else:
+            msg = '%s is an invalid type for the "project" argument'
+            raise TypeError, msg % str(type(project))
+
+        if registry_object is not None:
+            self.registry = registry_object.copy()
+        else: self.registry = None
+
+        # allow override of targetYearFromDate() from project's config object
+        tyFunction = config_object.get('targetYearFromDate', None)
+        if tyFunction is not None:
+            self.targetYearFromDate = tyFunction
+
+        # initilaize file access managers
+        self._initFileManagerClasses_()
+
+        # simple hook for subclasses to initialize additonal attributes  
+        self.completeInitialization()
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

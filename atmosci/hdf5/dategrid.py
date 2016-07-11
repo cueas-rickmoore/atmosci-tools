@@ -36,6 +36,7 @@ class Hdf5DateGridReaderMixin(object):
                 self._indexesForDates(dataset_name, start_date, end_date)
                 data = self.getDataset(dataset_name).value[start:end, y, x]
         return self._processDataOut(dataset_name, data, **kwargs)
+    dataAtNode = getDataAtNode
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -43,16 +44,19 @@ class Hdf5DateGridReaderMixin(object):
         indx = self._indexForDate(dataset_name, date)
         dataset = self.getDataset(dataset_name)
         return self._processDataOut(dataset_name, dataset[indx], **kwargs)
-
+    dataForDate = getDataForDate
+    
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def getDataSince(self, dataset_name, date, **kwargs):
         return self.getDateSlice(dataset_name, date, self.end_date, **kwargs)
+    dataSince = getDataSince
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def getDataThru(self, dataset_name, date, **kwargs):
         return self.getDateSlice(dataset_name, self.start_date, date, **kwargs)
+    dataThru = getDataThru
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -60,6 +64,7 @@ class Hdf5DateGridReaderMixin(object):
         date = self.getObjectAttribute(object_path, attribute_name, default)
         if date is not None: return asDatetimeDate(date)
         return None
+    dateAttribute = getDateAttribute
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -68,6 +73,7 @@ class Hdf5DateGridReaderMixin(object):
         dataset = self.getDataset(dataset_name)
         data = self._dateSlice(dataset, start, end)
         return self._processDataOut(dataset_name, data, **kwargs)
+    dateSlice = getDateSlice
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -79,6 +85,7 @@ class Hdf5DateGridReaderMixin(object):
         data = \
         self._slice3DDataset(dataset, start, end, min_y, max_y, min_x, max_x)
         return self._processDataOut(dataset_name, data, **kwargs)
+    dataSlice = get3DSlice
 
    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

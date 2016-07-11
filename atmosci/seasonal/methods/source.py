@@ -69,6 +69,7 @@ class SourceFileAccessorMethods:
                                            data_type, **kwargs)
         return self.newProjectFileBuilder(filepath, 'source', source, 
                                           target_year, region, **kwargs)
+    sourceFileBuilder = getSourceFileBuilder
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -77,6 +78,7 @@ class SourceFileAccessorMethods:
         filepath = self.sourceGridFilepath(source, target_year, region,
                                            data_type, **kwargs)
         return self.newProjectFileAccessor(filepath, 'manage', 'source', mode)
+    sourceFileManager = getSourceFileManager
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -85,6 +87,7 @@ class SourceFileAccessorMethods:
         filepath = self.sourceGridFilepath(source, target_year, region,
                                            data_type, **kwargs)
         return self.newProjectFileAccessor(filepath, 'read', 'source')
+    sourceFileReader = getSourceFileReader
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -99,7 +102,7 @@ class SourceFileAccessorMethods:
             source_dir = self.config.dirpaths.get('source', None)
             if source_dir is None:
                 source_dir = self.projectRootDir()
-            source_dir = os.path.join('grid')
+            source_dir = os.path.join(source_dir, 'grid')
         if self.project.subproject_by_region:
             source_dir =  self.subdirByRegion(source_dir, region)
         source_dir = \

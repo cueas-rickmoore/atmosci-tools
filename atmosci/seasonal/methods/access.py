@@ -22,7 +22,7 @@ class BasicFileAccessorMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getFileAccessorClass(self, filetype_key, access_type):
+    def fileAccessorClass(self, filetype_key, access_type):
         filetype_obj = self.getFiletypeConfig(filetype_key)
         if filetype_obj is not None:
             class_type = filetype_obj.get('filetype', filetype_key)
@@ -33,31 +33,35 @@ class BasicFileAccessorMethods:
         Classes = \
             self.AccessClasses.get(class_type, self.AccessClasses.default)
         return Classes[access_type]
+    getFileAccessorClass = fileAccessorClass
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Generic grid file access manager constructors
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getGridFileBuilder(self, filepath, filetype, source, target_year,
+    def gridFileBuilder(self, filepath, filetype, source, target_year,
                                  region=None, **kwargs):
         return self.newProjectFileBuilder(filepath, filetype, source,
                                           target_year, region, **kwargs)
+    getGridFileBuilder = gridFileBuilder
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getGridFileManager(self, filepath, filetype='project', mode='r'):
+    def gridFileManager(self, filepath, filetype='project', mode='r'):
         return self.newProjectFileAccessor(filepath, 'manage', filetype, mode)
+    getGridFileManager = gridFileManager
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getGridFileReader(self, filepath, filetype='project'):
+    def gridFileReader(self, filepath, filetype='project'):
         return self.newProjectFileAccessor(filepath, 'read', filetype)
+    getGridFileReader = gridFileReader
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def newProjectFileAccessor(self, filepath, access, filetype, mode=None):
-        Class = self.getFileAccessorClass(filetype, access)
+        Class = self.fileAccessorClass(filetype, access)
         registry = self.getRegistryConfig()
         if access == 'read': return Class(filepath, registry)
         else: return Class(filepath, registry, mode)
@@ -68,7 +72,7 @@ class BasicFileAccessorMethods:
                                     region, **kwargs):
         registry = kwargs.get('registry', self.getRegistryConfig())
         config = kwargs.get('config', self.config)
-        Class = self.getFileAccessorClass(filetype, 'build')
+        Class = self.fileAccessorClass(filetype, 'build')
         config = self.config
         if target_year is not None:
             if kwargs:

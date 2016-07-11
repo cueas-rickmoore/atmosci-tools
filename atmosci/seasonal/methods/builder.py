@@ -117,6 +117,10 @@ class GridFileBuildMethods:
         return self.__filetype
 
     @property
+    def project(self):
+        return self.__config.get('project',None)
+
+    @property
     def region(self):
         return self.__region
 

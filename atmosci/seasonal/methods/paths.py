@@ -46,7 +46,7 @@ class PathConstructionMethods:
             root = self.project.get('root', None)
             if root is None: return self.workingDir()
             root_dir = os.path.join(self.workingDir(),
-                                    self.nameToDirpath(root))
+                                    self.normalizeDirpath(root))
         if not os.path.exists(root_dir): os.makedirs(root_dir)
         return root_dir
 
@@ -93,9 +93,15 @@ class PathConstructionMethods:
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def workingDir(self):
-        working_dir = self.config.dirpaths.working
-        if not os.path.exists(working_dir): os.makedirs(working_dir)
-        return working_dir
+        working_dir = self.config.get('dirpaths.working', None)
+        if working_dir is None:
+            working_dir = self.config.get('working_dir', None)
+        if working_dir is not None:
+            if not os.path.exists(working_dir): os.makedirs(working_dir)
+            return working_dir
+        else:
+            err_msg = 'Configuration contains no working directory path.'
+            raise LookupError, err_msg
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # project directory & data file path
@@ -173,10 +179,11 @@ class PathConstructionMethods:
         else:
             errmsg = 'Unable to locate download filename template for %s("%s")'
             raise KeyError, errmsg % (source_key, description)
+    downloadFileTemplate = getDownloadFileTemplate
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getFilenameTemplate(self, filetype, default=None):
+    def filenameTemplate(self, filetype, default=None):
         if isinstance(filetype, ConfigObject):
             # any config object might have a custom template
             template = self._findFilenameTemplate(filetype)
@@ -191,14 +198,19 @@ class PathConstructionMethods:
         else: tmpl_key = filetype
         # look up the template and return it
         return self.config.filenames.get(tmpl_key, default)
+    getFilenameTemplate = filenameTemplate
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def nameToDirpath(self, name):
+    def normalizeDirpath(self, obj_or_string):
+        if isinstance(obj_or_string, basestring): name = obj_or_string
+        else: name = obj_or_string.get('subdir', obj_or_string.name)
         _name = name.replace(' ','_').replace('-','_').replace('.',os.sep)
         return os.path.normpath(_name)
 
-    def nameToFilepath(self, name):
+    def normalizeFilepath(self, obj_or_string):
+        if isinstance(obj_or_string, basestring): name = obj_or_string
+        else: name = obj_or_string.get('tag', obj_or_string.name)
         _name = name.replace('_',' ').replace('-',' ').replace('.',' ')
         return _name.title().replace(' ','-')
 
@@ -209,13 +221,9 @@ class PathConstructionMethods:
             path = region.get('tag', None)
             if path is not None: return path
             path = region.name
-            if len(path) in (1, 2):
-                return path.upper()
-        else:
-            if len(region) in (1, 2):
-                return region.upper()
-            path = region
-        return self.nameToDirpath(path)
+        else: path = region
+        if len(path) in (1, 2): return path.upper()
+        else: return self.normalizeDirpath(path)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -224,12 +232,8 @@ class PathConstructionMethods:
             path = region.get('tag', None)
             if path is not None: return path
             path = region.name
-            if len(path) in (1, 2):
-                path = path.upper()
-        else:
-            if len(region) in (1, 2):
-                return region.upper()
-            path = region
+        else: path = region
+        if len(path) in (1, 2): return path.upper()
         if title:
             path = path.replace('_',' ').replace('.',' ').title()
             return path.replace(' ','-')
@@ -241,10 +245,9 @@ class PathConstructionMethods:
         if isinstance(source, ConfigObject):
             subdir = source.get('subdir', None)
             if subdir is not None:
-                return self.nameToDirpath(subdir)
-            else: 
-                return self.nameToDirpath(source.name.lower())
-        return self.nameToDirpath(source.lower())
+                return self.normalizeDirpath(subdir)
+            else: return self.normalizeDirpath(source.name.lower())
+        return self.normalizeDirpath(source.lower())
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

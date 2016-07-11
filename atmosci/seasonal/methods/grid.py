@@ -12,6 +12,32 @@ def isNanString(_string_):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+def hdf5ReaderPatch(self):
+    self.data = self.getData
+    self.dataWhere = self.getDataWhere
+
+    self.dataset = self.getDataset
+    self.datasetAttribute = self.getDatasetAttribute
+    self.datasetAttributes = self.getDatasetAttributes
+    self.datasetShape = self.getDatasetShape
+    self.datasetType = self.getDatasetType
+
+    self.fileAttribute = self.getFileAttribute
+    self.fileAttributes = self.getFileAttributes
+    self.fileHierarchy = self.getFileHierarchy
+
+    self.groupAttribute = self.getGroupAttribute
+    self.groupAttributes = self.getGroupAttributes
+    self.groupHierarchy = self.getGroupHierarchy
+
+    self.object = self.getObject
+    self.objectAttribute = self.getObjectAttribute
+    self.objectAttributes = self.getObjectAttributes
+    self.objectShape = self.getObjectShape
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 class GridFileReaderMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -61,7 +87,6 @@ class GridFileReaderMethods:
         if to_units is not None:
             from_units = self.getDatasetUnits(dataset_path)
             if from_units is not None:
-                if '*' in from_units: from_units = from_units.split('*')[0]
                 data = convertUnits(data, from_units, to_units)
         return data
 
@@ -82,6 +107,9 @@ class GridFileReaderMethods:
         # discover packing parameters for dataset, if they exist
         packed_dtype, packed_missing, multiplier, data_dtype, data_missing =\
         self._getPackParams(self.getDataset(dataset_path))
+
+        if 'dtype' in kwargs: data_dtype = kwargs['dtype']
+        if 'missing' in kwargs: data_missing = kwargs['missing']
 
         # handle NumPy arrays
         if isinstance(packed_data, N.ndarray):
@@ -174,6 +202,15 @@ class GridFileReaderMethods:
         self._configDatasets_()
         self._loadDatasetAttrs_()
         self._postLoadFileAttrs_()
+
+    def _preInitProject_(self, registry, **kwargs):
+        self.registry = registry.copy()
+        self._dataset_names = [ ]
+        self._datasets_ = { }
+        self._unpackers = { }
+
+    def _postInitProject_(self, **kwargs):
+        pass
 
     def _postLoadFileAttrs_(self):
         pass

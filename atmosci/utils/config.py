@@ -5,7 +5,7 @@ from copy import deepcopy
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 GETATTR_FAILED = hash('attribute/object path lookup failed')
-RESERVED = ('__ATTRIBUTES__', '__CHILDREN__', '__RESERVED___', 
+RESERVED = ('__ATTRIBUTES__', '__CHILDREN__', '__RESERVED__', 
             'name', 'parent', 'proper_name')
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -63,7 +63,7 @@ class ConfigObject(object):
         self.__dict__['isOrdered'] = False
         self.__dict__['__ATTRIBUTES__'] = { }
         self.__dict__['__CHILDREN__'] = { }
-        self.__dict__['__RESERVED___'] = RESERVED
+        self.__dict__['__RESERVED__'] = RESERVED
 
         self._set_name_(name)
 
@@ -301,7 +301,7 @@ class ConfigObject(object):
                  key in self.__dict__['__ATTRIBUTES__'].keys() )
 
     def isReservedKey(self, key):
-        return key in self.__dict__['__RESERVED___']
+        return key in self.__dict__['__RESERVED__']
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     #
@@ -443,7 +443,7 @@ class ConfigObject(object):
         return default
 
     def _ingest_(self, key, value, must_be_object=False):
-        if key in self.__dict__['__RESERVED___']:
+        if key in self.__dict__['__RESERVED__']:
             raise KeyError, 'Path contains a reserved name key "%s"' % key
         if self.has_key(key): self._delete_child_(key)
 
@@ -480,7 +480,7 @@ class ConfigObject(object):
             raise TypeError, errmsg % type(path)
 
     def _proper_name_(self, name):
-        return name.title()
+        return name.replace('_',' ').title()
 
     def _set_name_(self, new_name):
         self.__dict__['name'] = new_name
@@ -625,7 +625,7 @@ class OrderedConfigObject(ConfigObject):
         self.__dict__['isOrdered'] = True
         self.__dict__['__ATTRIBUTES__'] = OrderedDict()
         self.__dict__['__CHILDREN__'] = OrderedDict()
-        self.__dict__['__RESERVED___'] = RESERVED
+        self.__dict__['__RESERVED__'] = RESERVED
 
         self._set_name_(name)
 
