@@ -30,11 +30,13 @@ class BasicFileAccessorMethods:
             if '.' in filetype_key:
                 class_type = filetype_key.split('.')[0]
             else: class_type = filetype_key
-        Classes = \
-            self.AccessClasses.get(class_type, self.AccessClasses.default)
+        print '\n\n\n', filetype_key, access_type, class_type
+        print self.AccessClasses, '\n\n\n'
+        Classes = self.AccessClasses.get(class_type, None)
+        if Classes is None:
+            Classes = self.AccessClasses.get(self.AccessClasses.default)
         return Classes[access_type]
     getFileAccessorClass = fileAccessorClass
-
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Generic grid file access manager constructors

@@ -508,7 +508,7 @@ class ConfigObject(object):
         for key, child_obj in obj.__dict__['__CHILDREN__'].items():
             if key in self.__dict__['__CHILDREN__']:
                 self.__dict__['__CHILDREN__'][key]._update_(child_obj)
-            else: self.__dict__['__CHILDREN__'][key] = config_obj.copy(key, self)
+            else: self.__dict__['__CHILDREN__'][key] = obj.copy(key, self)
 
         for key, value in obj.__dict__['__ATTRIBUTES__'].items():
             if isinstance(value, tuple):
