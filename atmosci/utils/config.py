@@ -4,9 +4,17 @@ from copy import deepcopy
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+BOGUS_VALUE = "~!@#$%^&*()-+=|}{:;<>?"
 GETATTR_FAILED = hash('attribute/object path lookup failed')
 RESERVED = ('__ATTRIBUTES__', '__CHILDREN__', '__RESERVED__', 
             'name', 'parent', 'proper_name')
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def dictToConfig(dict_, name='config', parent=None):
+    config = ConfigObject(name, parent)
+    for key, value in dict_.items(): config[key] = value
+    return config
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -146,11 +154,20 @@ class ConfigObject(object):
         else:
             raise TypeError, "Invalid type for 'obj' argument : %s" % type(obj)
 
-    def find(self, path):
+    def find(self, path, default=BOGUS_VALUE):
         _path = self._path_to_list_(path)
         # check to see if my own name is at the beginning of the path
-        if self._is_my_name_(_path[0]): return self._find_(_path[1:])
-        return self._find_(_path)
+        if self._is_my_name_(_path[0]):
+            return self._find_(_path, 1, default)
+        return self._find_(_path, 0, default)
+
+    def flatten(self):
+        flat = { }
+        if self.hasAttributes():
+            flat.update(dict(self.attritems()))
+        for name, child in self.items():
+            flat[name] = child.flatten()
+        return flat
 
     def hierarchy(self, seed=None, hierarchy=None):
         my_name = self.__dict__['name']
@@ -375,7 +392,7 @@ class ConfigObject(object):
     def _dict_keys_(): return self.__dict__.keys()
     dict_keys = property(_dict_keys_)
 
-    def _find_(self, path, depth=0):
+    def _find_(self, path, depth=0, default=BOGUS_VALUE):
         if path[-1] == '*':
             errmsg = 'Path may not end with an asterisk : "%s"'
             raise KeyError, errmsg % '.'.join(path)
@@ -395,12 +412,14 @@ class ConfigObject(object):
             if child is not None:
                 if path_len == plus_1: return child
                 else: 
-                    _found = child._find_(path, depth=plus_1)
+                    _found = child._find_(path, plus_1, default)
                     if _found is not None: return _found
+                    if default != BOGUS_VALUE: return default
             else:
                 if path_len == plus_1:
                     _found = self.__dict__['__ATTRIBUTES__'].get(key, None)
                     if _found is not None: return _found
+                if default != BOGUS_VALUE: return default
                 errmsg = 'Path ends prematurely at "%s"'
                 raise KeyError, errmsg % '.'.join(path[:plus_1])
 
@@ -409,12 +428,12 @@ class ConfigObject(object):
             # asterisk in path, loop through all children
             # return all matches after asterisk
             for child in self.values():
-                _found = child._find_(path, depth=plus_1)
+                _found = child._find_(path, plus_1, None)
                 if _found is not None:
                     found_path = '.'.join(path).replace('*',child.name)
                     found.append((found_path, _found))
-            if found:
-                return dict(found)
+            if found: return dict(found)
+            if default != BOGUS_VALUE: return default
 
         # will only get here at the top level of the path stack
         errmsg = '"%s" does not correspond to any object'

@@ -141,9 +141,10 @@ class AcisGridDownloadMixin:
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def unpackAcisGrid(self, elem, grid):
-        grid = N.array(grid)
-        grid[N.where(grid=='M')] = '-999'
-        grid = grid.astype(float)
-        grid[grid<-998] = N.nan
-        return grid
+        narray = N.array(grid)
+        #Ms_in_array = N.where(narray=='M')
+        #if len(Ms_in_array[0]) > 0: narray[Ms_in_grid] = '-999'
+        narray = narray.astype(float)
+        narray[narray<-998] = N.nan
+        return narray
 

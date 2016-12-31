@@ -2,8 +2,6 @@
 from atmosci.hdf5.manager import Hdf5DateGridFileReader
 from atmosci.hdf5.manager import Hdf5DateGridFileManager
 
-from atmosci.seasonal.methods.tempext  import TempextAccessMethods
-from atmosci.seasonal.methods.tempext  import TempextUpdateMethods
 from atmosci.seasonal.methods.builder  import TimeGridFileBuildMethods
 from atmosci.seasonal.methods.timegrid import TimeGridFileReaderMethods
 from atmosci.seasonal.methods.timegrid import TimeGridFileManagerMethods
@@ -13,8 +11,7 @@ from atmosci.seasonal.methods.grid import hdf5ReaderPatch
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class SeasonalGridFileReader(TempextAccessMethods,
-                             TimeGridFileReaderMethods,
+class SeasonalGridFileReader(TimeGridFileReaderMethods,
                              Hdf5DateGridFileReader):
 
     def __init__(self, filepath, registry):
@@ -32,8 +29,7 @@ class SeasonalGridFileReader(TempextAccessMethods,
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class SeasonalGridFileManager(TempextUpdateMethods,
-                              TimeGridFileManagerMethods,
+class SeasonalGridFileManager(TimeGridFileManagerMethods,
                               Hdf5DateGridFileManager):
 
     def __init__(self, filepath, registry, mode='r'):

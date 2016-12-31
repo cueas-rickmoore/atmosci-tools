@@ -79,11 +79,63 @@ CFGBASE.project.shared_source = True
 CFGBASE.project.start_day = (1,1)
 CFGBASE.project.subproject_by_region = True
 
-
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# dataset view mapping
+# dataset parameter definitions
+#
+#    description = brief description of data contained in dataset (string)
+#
+#    dtype = type for raw data when added to file
+#            also used as type for extracted data
+#    dtype_packed = type used when data is store in the file
+#
+#    missing_data = missing value in raw data when added to file
+#                   also used as missing value for extracted data
+#    missing_packed = value used for missing when stored in the file
+#
+#    units = units for values in raw data
+#    packed_units = units for values in stored data
+#                   if not specified, input units are used
+#               
+#    period = period of time covered by a single entry in the dataset
+#             date = one calendar day per entry
+#             doy = one day of an ideal year (0-365 or 0-366)
+#                   used to map historical summary data to specific dates
+#             year = one calendar year per entry
+#
+#    scope = time covered by entire dataset
+#            year = a single year
+#            season = dataset spansparts of two or more years
+#            por = dataset spans multiple years
+#
+#    view = layout of the dataset
+#           lat = latitude dimension
+#           lon = longitude dimension
+#           time dimensions :
+#               date = dimension is span of dates 
+#               doy = dimension is span of normalized days
+#               year = dimension is years 
+#               time = time in days, hour, minutes, seconds
+#        example : 'view':('day','lat','lon')
+#
+#    time span parameters :
+#        for date dimension :
+#            start_day = first day in dataset ... as int tuple (MM,DD)
+#            end_day = last day in dataset ... as int tuple (MM,DD)
+#        for doy dimension :
+#            start_doy = first doy in dataset ... as int tuple (MM,DD)
+#            end_doy = last doy in dataset ... as int tuple (MM,DD)
+#        for year dimension :  
+#            start_year = first year in dataset ... as int
+#            end_year = last year in dataset ... as int
+#
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-CFGBASE.view_map = { ('time','lat','lon'):'tyx', ('lat','lon','time'):'yxt',
+# dataset view mappings
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+CFGBASE.view_map = { ('date','lat','lon'):'tyx', ('lat','lon','date'):'yxt',
+                     ('date','lon','lat'):'txy', ('lon','lat','date'):'xyt',
+                     ('doy','lat','lon'):'tyx', ('doy','lon','time'):'yxt',
+                     ('doy','lon','lat'):'txy', ('doy','lat','time'):'xyt',
+                     ('time','lat','lon'):'tyx', ('lat','lon','time'):'yxt',
                      ('time','lon','lat'):'txy', ('lon','lat','time'):'xyt',
                      ('lat','lon'):'yx', ('lon','lat'):'xy',
                      ('lat','time'):'yt', ('time',):'t',
@@ -111,26 +163,28 @@ CFGBASE.datasets.doyaccum = { 'dtype':float, 'dtype_packed':'<i2',
                              'provenance':'doyaccum' }
 
 CFGBASE.datasets.dategrid = { 'dtype':float, 'dtype_packed':'<i2',
-                             'missing_packed':-32768, 'missing_data':N.nan,
-                             'scope':'season', 'period':'date',
-                             'view':('time','lat','lon'),
-                             'start_day':(1,1), 'end_day':(12,31),
-                             'provenance':'datestats' }
+                              'missing_packed':-32768, 'missing_data':N.nan,
+                              'scope':'season', 'period':'date',
+                              'view':('time','lat','lon'),
+                              'start_day':(1,1), 'end_day':(12,31),
+                              'provenance':'datestats', 
+                              'chunk_type':('date','gzip') }
 
 CFGBASE.datasets.doygrid = { 'dtype':float, 'dtype_packed':'<i2',
-                            'missing_packed':-32768, 'missing_data':N.nan,
-                            'scope':'season', 'period':'doy',
-                            'view':('time','lat','lon'),
-                            'start_day':(1,1), 'end_day':(12,31),
-                            'provenance':'doystats' }
+                             'missing_packed':-32768, 'missing_data':N.nan,
+                             'scope':'season', 'period':'doy',
+                             'view':('time','lat','lon'),
+                             'start_day':(1,1), 'end_day':(12,31),
+                             'provenance':'doystats',
+                             'chunk_type':('doy','gzip') }
 
 # temperature datasets
-CFGBASE.datasets.maxt = CFGBASE.datasets.dategrid.copy()
+CFGBASE.datasets.dategrid.copy('maxt', CFGBASE.datasets)
 CFGBASE.datasets.maxt.description = 'Daily maximum temperature' 
 CFGBASE.datasets.maxt.scope = 'year'
 CFGBASE.datasets.maxt.units = 'F'
 
-CFGBASE.datasets.mint = CFGBASE.datasets.dategrid.copy()
+CFGBASE.datasets.dategrid.copy('mint', CFGBASE.datasets)
 CFGBASE.datasets.mint.description = 'Daily minimum temperature' 
 CFGBASE.datasets.maxt.scope = 'year'
 CFGBASE.datasets.mint.units = 'F'

@@ -22,8 +22,8 @@ class Hdf5DateGridReaderMixin(object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     
-    def getDataAtNode(self, dataset_name, lon, lat, start_date=None,
-                            end_date=None, **kwargs):
+    def dataAtNode(self, dataset_name, lon, lat, start_date=None,
+                         end_date=None, **kwargs):
         y, x = self.ll2index(lon, lat)
         if start_date is None:
             data = self.getDataset(dataset_name).value[:, y, x]
@@ -36,56 +36,72 @@ class Hdf5DateGridReaderMixin(object):
                 self._indexesForDates(dataset_name, start_date, end_date)
                 data = self.getDataset(dataset_name).value[start:end, y, x]
         return self._processDataOut(dataset_name, data, **kwargs)
-    dataAtNode = getDataAtNode
+    getDataAtNode = dataAtNode
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getDataForDate(self, dataset_name, date, **kwargs):
+    def dataForDate(self, dataset_name, date, **kwargs):
         indx = self._indexForDate(dataset_name, date)
         dataset = self.getDataset(dataset_name)
         return self._processDataOut(dataset_name, dataset[indx], **kwargs)
-    dataForDate = getDataForDate
+    getDataForDate = dataForDate
     
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getDataSince(self, dataset_name, date, **kwargs):
+    def dataSince(self, dataset_name, date, **kwargs):
         return self.getDateSlice(dataset_name, date, self.end_date, **kwargs)
-    dataSince = getDataSince
+    getDataSince = dataSince
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getDataThru(self, dataset_name, date, **kwargs):
+    def dataThru(self, dataset_name, date, **kwargs):
         return self.getDateSlice(dataset_name, self.start_date, date, **kwargs)
-    dataThru = getDataThru
+    getDataThru = dataThru
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getDateAttribute(self, object_path, attribute_name, default=None):
+    def dateAttribute(self, object_path, attribute_name, default=None):
         date = self.getObjectAttribute(object_path, attribute_name, default)
         if date is not None: return asDatetimeDate(date)
         return None
-    dateAttribute = getDateAttribute
+    getDateAttribute = dateAttribute
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getDateSlice(self, dataset_name, start_date, end_date, **kwargs):
+    def dateAttributes(self, object_path, as_date_obj=False):
+        attrs = self.objectAttributes(object_path)
+        date_attrs = {}
+        if as_date_obj:
+            for key, value in attrs.items():
+                if key.endswith('date'):
+                    date_attrs[key] = asDatetimeDate(value)
+        else:
+            for key, value in attrs.items():
+                if key.endswith('date'): date_attrs[key] = value
+        return date_attrs
+    getDateAttributes = dateAttributes
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def dateSlice(self, dataset_name, start_date, end_date, **kwargs):
         start, end = self._indexesForDates(dataset_name, start_date, end_date)
         dataset = self.getDataset(dataset_name)
         data = self._dateSlice(dataset, start, end)
         return self._processDataOut(dataset_name, data, **kwargs)
-    dateSlice = getDateSlice
+    getDateSlice = dateSlice
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def get3DSlice(self, dataset_name, start_date, end_date, min_lon, max_lon,
+    def dataSlice(self, dataset_name, start_date, end_date, min_lon, max_lon,
                          min_lat, max_lat, **kwargs):
         min_y, min_x = self.ll2index(min_lon, min_lat)
         max_y, max_x = self.ll2index(max_lon, max_lat)
         start, end = self._indexesForDates(dataset_name, start_date, end_date)
+        dataset = self.getDataset(dataset_name)
         data = \
         self._slice3DDataset(dataset, start, end, min_y, max_y, min_x, max_x)
         return self._processDataOut(dataset_name, data, **kwargs)
-    dataSlice = get3DSlice
+    get3DSlice = dataSlice
 
    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -164,7 +180,7 @@ class Hdf5DateGridReaderMixin(object):
                 if max_x == min_x:
                     return dataset.value[start:end, min_y:max_y, min_x]
                 elif max_x < dataset.shape[2]:
-                    return dataset.value[start, min_y:max_y, min_x:max_x]
+                    return dataset.value[start:end, min_y:max_y, min_x:max_x]
                 else: # max_x >= dataset.shape[2]
                     return dataset.value[start:end, min_y:max_y, min_x:]
             else: # max_y >= dataset.shape[1]

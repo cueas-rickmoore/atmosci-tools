@@ -62,6 +62,21 @@ class PathConstructionMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def sourceDirpath(self, source, region):
+        order = self.project.get('source_subdir_order', 'region-source')
+        if order == 'region-source':
+            dirpath = os.path.join(self.projectRootDir(),
+                                   self.regionToDirpath(region),
+                                   self.sourceToDirpath(source))
+        else:
+            dirpath = os.path.join(self.projectRootDir(),
+                                   self.sourceToDirpath(source),
+                                   self.regionToDirpath(region))
+        if not os.path.exists(dirpath): os.makedirs(dirpath)
+        return dirpath
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def sharedRootDir(self, data_format=None):
         shared_dir = self.config.dirpaths.get('shared', None)
         if shared_dir is None:
@@ -110,15 +125,11 @@ class PathConstructionMethods:
     def projectGridFilename(self, filetype, source, region=None,
                                   target_year=None, **kwargs):
         template = self.getFilenameTemplate(filetype)
-        template_args = dict(kwargs)
-        if region is not None:
-            template_args['region'] = self.regionToFilepath(region)
-        else:
-            template_args['region'] = \
-                self.regionToFilepath(self.config.project.region)
-        template_args['source'] = self.sourceToFilepath(source)
-        if target_year is not None:
-            template_args['year'] = target_year
+        template_args = templateArgs(target_year, source, region)
+        if not 'region' in template_args:
+            project_region = self.config.project.region
+            template_args['region'] = self.regionToFilepath(project_region)
+        template_args.update(dict(kwargs))
         return template % template_args
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -257,6 +268,17 @@ class PathConstructionMethods:
             if path is None: path = source.name.upper()
         else: path = source.upper()
         return path.replace(' ','-').replace('_','-').replace('.','-')
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def templateArgs(self, target_year=None, source=None, region=None):
+        template_args =  { }
+        if target_year is not None: template_args['year'] = target_year
+        if source is not None:
+             template_args['source'] = self.sourceToFilepath(source)
+        if region is not None:
+            template_args['region'] = self.regionToFilepath(region)
+        return template_args
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

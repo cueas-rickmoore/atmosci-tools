@@ -843,8 +843,17 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def setDateAttribute(self, dataset_path, attribute_name, date):
-        date_str = date.strftime('%Y-%m-%d')
-        self.setObjectAttribute(dataset_path, attribute_name, date_str)
+        if isinstance(date, basestring):
+            self.setObjectAttribute(dataset_path, attribute_name, date)
+        else:
+            date_str = date.strftime('%Y-%m-%d')
+            self.setObjectAttribute(dataset_path, attribute_name, date_str)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setDateAttributes(self, dataset_path, **dates):
+        for attribute_name, date in dates.items():
+            self.setDateAttribute(dataset_path, attribute_name, date)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

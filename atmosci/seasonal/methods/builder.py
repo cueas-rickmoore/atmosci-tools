@@ -224,13 +224,12 @@ class GridFileBuildMethods:
         shape, dtype, attrs = \
         self._resolveDatasetBuildAttributes(dataset, dataset_keydict,
                                             group_keydict, **kwargs)
-        if "chunks" in dataset:
-            attrs["chunks"] = dataset.chunks
-        else:
-            chunks = kwargs.get('chunks',
-                            self._estimateChunks(attrs['view'], shape))
-            if chunks is not None: attrs['chunks'] = chunks
-        if "chunks" in attrs:
+        if 'shape' in kwargs: del kwargs['shape']
+
+        view = attrs.get('view',None)
+        chunks = self._resolveDatasetChunks(dataset, shape, view, **kwargs)
+        if chunks is not None:
+            attrs['chunks'] = chunks
             if "compression" in dataset:
                 attrs['compression'] = dataset.compression
             else: attrs['compression'] = 'gzip'
@@ -245,7 +244,8 @@ class GridFileBuildMethods:
             self.createDataset(dataset_path, data, **attrs)
             self.close()
         else:
-            errmsg = 'Shape of input data does not match shape of dataset.'
+            errmsg = 'Shape of input data %s does not match' % str(data.shape)
+            errmsg = '%s shape of new dataset %s.' % (errmsg, str(shape))
             raise ValueError, errmsg
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -393,15 +393,6 @@ class GridFileBuildMethods:
     # attribute resolution methods
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
-    def _estimateChunks(self, view, shape):
-        if len(shape) == 3:
-            if view[0] == 't':
-                return (1, shape[1], shape[2])
-            elif view[2] == 't': return (1, 1, shape[2])
-        return None
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
     def _packTypeStr(self, pack_type):
         if isinstance(pack_type, basestring):
             type_str = pack_type
@@ -463,12 +454,10 @@ class GridFileBuildMethods:
             del _keydict_['shape']
             view = dataset_config.get('view', None)
 
-        if view is not None:
-            attrs['view'] = view
+        if view is not None: attrs['view'] = view
 
         time_attrs = self._resolveTimeAttributes(dataset_config, **kwargs)
-        if time_attrs:
-            attrs.update(time_attrs)
+        if time_attrs: attrs.update(time_attrs)
 
         dtype = dataset_config.dtype
         packed_dtype = dataset_config.get('dtype_packed', dtype)
@@ -505,6 +494,18 @@ class GridFileBuildMethods:
                 else: attrs['unpack'] = '(%s,None)' % dtype
 
         return shape, packed_dtype, attrs
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _resolveDatasetChunks(self, dataset, shape, view, **kwargs):
+        chunks = kwargs.get('chunks',None)
+        if chunks is not None: return chunks
+        chunks = dataset.get('chunks', None)
+        if chunks is not None: return chunks
+        if len(shape) == 3:
+            if view[0] == 't': return (1, shape[1], shape[2])
+            elif view[2] == 't': return (1, 1, shape[2])
+        return None
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -636,17 +637,22 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
         else: self.prov_generators = { }
 
         if target_year is not None:
-            self.target_year = target_year
-            if target_year in (365,366):
-                self.end_day = self._projectEndDay(**kwargs)
-                self.end_doy = self._projectEndDoy(target_year, **kwargs)
-                self.start_day = self._projectStartDay(**kwargs)
-                self.start_doy = self._projectStartDoy(target_year, **kwargs)
-                self.num_days = (self.end_doy - self.start_doy) + 1
-            else:
-                self.end_date = self._projectEndDate(target_year,**kwargs)
-                self.start_date = self._projectStartDate(target_year, **kwargs)
-                self.num_days = (self.end_date - self.start_date).days + 1
+            self.preInitTimeAttributes(target_year, **kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def preInitTimeAttributes(self, target_year, **kwargs):
+        self.target_year = target_year
+        if target_year in (365,366):
+            self.end_day = self._projectEndDay(**kwargs)
+            self.end_doy = self._projectEndDoy(target_year, **kwargs)
+            self.start_day = self._projectStartDay(**kwargs)
+            self.start_doy = self._projectStartDoy(target_year, **kwargs)
+            self.num_days = (self.end_doy - self.start_doy) + 1
+        else:
+            self.end_date = self._projectEndDate(target_year,**kwargs)
+            self.start_date = self._projectStartDate(target_year, **kwargs)
+            self.num_days = (self.end_date - self.start_date).days + 1
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # additional file attributes (called by base initFileAttributes method)
@@ -752,16 +758,18 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
     def _resolveDateAttributes(self, dataset, **kwargs):
-        attrs = { }
+        time_attrs = { }
+        for key, value in kwargs.items():
+            if key.endswith('_date'):
+                time_attrs[key] = asAcisQueryDate(value)
         if self.target_year:
-            start_date = kwargs.get('start_date',
-                         self._projectStartDate(self.target_year, **dataset))
-            attrs['start_date'] = asAcisQueryDate(start_date)
-                
-            end_date = kwargs.get('end_date',
-                       self._projectEndDate(self.target_year, **dataset))
-            attrs['end_date'] = asAcisQueryDate(end_date)
-        return attrs
+            if 'start_date' not in time_attrs:
+                date =self._projectStartDate(self.target_year, **dataset)
+                time_attrs['start_date'] = asAcisQueryDate(date)
+            if 'end_date' not in time_attrs:
+                date = self._projectEndDate(self.target_year, **dataset)
+                time_attrs['end_date'] = asAcisQueryDate(date)
+        return time_attrs
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -854,8 +862,8 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
         end_date = kwargs.get('end_date', None)
         if end_date is None:
             day = self._projectEndDay(**kwargs)
-            return datetime.date(year, *day)
-        else: return end_date
+            end_date = datetime.date(year, *day)
+        return end_date
 
     def _projectEndDay(self, **kwargs):
         day = kwargs.get('end_day', self.filetype.get('end_day',

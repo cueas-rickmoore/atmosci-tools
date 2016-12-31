@@ -70,8 +70,18 @@ class BasicProjectFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def regionConfig(self, region_key):
-        return self.config.regions[region_key]
+    def regionConfig(self, region_key=None):
+        key = region_key
+        if key is None: key = self.config.project.get('region', None)
+        if key is not None:
+            region = self.config.regions.get(key, None)
+            if region is not None: return region
+            errmsg = "%s does not correspond to any configured region."
+            raise KeyError, errmsg % key
+        else:
+            errmsg = "Region key was not passed to function and no default" 
+            errmsg = "%s was found in the configuration object." % errmsg
+            raise ValueError, errmsg
     getRegionConfig = regionConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -81,8 +91,18 @@ class BasicProjectFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     
-    def sourceConfig(self, source_key):
-        return self.config.sources[source_key]
+    def sourceConfig(self, source_key=None):
+        key = source_key
+        if key is None: key = self.config.project.get('source', None)
+        if key is not None:
+            source = self.config.sources.get(key, None)
+            if source is not None: return source
+            errmsg = "%s does not correspond to any configured source."
+            raise KeyError, errmsg % key
+        else:
+            errmsg = "Source key was not passed to function and no default" 
+            errmsg = "%s was found in the configuration object." % errmsg
+            raise ValueError, errmsg
     getSourceConfig = sourceConfig
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

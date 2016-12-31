@@ -33,33 +33,35 @@ class StaticFileAccessorMethods:
     # static file access
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getStaticFileBuilder(self, source, region, **kwargs):
+    def staticFileBuilder(self, source, region, **kwargs):
         filepath = kwargs.get('filepath',
                               self.staticGridFilepath(source,region,**kwargs))
         filetype = 'static.%s' % self.sourceName(source)
         return self.newProjectFileBuilder(filepath, filetype, source, None,
                                           region)
+    getStaticFileBuilder = staticFileBuilder
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getStaticFileManager(self, source, region, mode='r', **kwargs):
+    def staticFileManager(self, source, region, mode='r', **kwargs):
         filepath = kwargs.get('filepath',
                               self.staticGridFilepath(source,region,**kwargs))
         return self.newProjectFileAccessor(filepath, 'manage', 'static', mode)
+    getStaticFileManager = staticFileManager
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getStaticFileReader(self, source, region, **kwargs):
+    def staticFileReader(self, source, region, **kwargs):
         filepath = kwargs.get('filepath',
                               self.staticGridFilepath(source,region,**kwargs))
         return self.newProjectFileAccessor(filepath, 'read', 'static')
-
+    getStaticFileReader = staticFileReader
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # static source directory & file paths
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getStaticFileTemplate(self, source):
+    def staticFileTemplate(self, source):
         if isinstance(source, ConfigObject):
             # any config object might have a custom template
             template = self._findFilenameTemplate(source)
@@ -79,6 +81,7 @@ class StaticFileAccessorMethods:
         if template is not None: return template
         # last resort, returnthe generic template for static files
         return self.config.filenames.static
+    getStaticFileTemplate = staticFileTemplate
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

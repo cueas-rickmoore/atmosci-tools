@@ -1,8 +1,6 @@
 
 import os
-
 import datetime
-from dateutil.relativedelta import relativedelta
 
 from atmosci.utils.config import ConfigObject
 
@@ -63,31 +61,32 @@ class SourceFileAccessorMethods:
     # source file access
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getSourceFileBuilder(self, source, target_year, region=None,
-                                   data_type=None, **kwargs):
+    def sourceFileBuilder(self, source, target_year, region=None,
+                                data_type=None, **kwargs):
         filepath = self.sourceGridFilepath(source, target_year, region,
                                            data_type, **kwargs)
         return self.newProjectFileBuilder(filepath, 'source', source, 
                                           target_year, region, **kwargs)
-    sourceFileBuilder = getSourceFileBuilder
+    
+    getSourceFileBuilder = sourceFileBuilder
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getSourceFileManager(self, source, target_year, region=None, 
-                                   data_type=None, mode='r', **kwargs):
+    def sourceFileManager(self, source, target_year, region=None, 
+                                data_type=None, mode='r', **kwargs):
         filepath = self.sourceGridFilepath(source, target_year, region,
                                            data_type, **kwargs)
         return self.newProjectFileAccessor(filepath, 'manage', 'source', mode)
-    sourceFileManager = getSourceFileManager
+    getSourceFileManager = sourceFileManager
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def getSourceFileReader(self, source, target_year, region=None, 
-                                  data_type=None, **kwargs):
+    def sourceFileReader(self, source, target_year, region=None, 
+                               data_type=None, **kwargs):
         filepath = self.sourceGridFilepath(source, target_year, region,
                                            data_type, **kwargs)
         return self.newProjectFileAccessor(filepath, 'read', 'source')
-    sourceFileReader = getSourceFileReader
+    getSourceFileReader = sourceFileReader
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -177,7 +176,7 @@ class SourceFileAccessorMethods:
         days_behind = source.get('days_behind', None)
         if days_behind is not None:
             latest_available_date = \
-                latest_available_date - relativedelta(days=days_behind)
+                latest_available_date - datetime.timedelta(days=days_behind)
         return latest_available_date
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

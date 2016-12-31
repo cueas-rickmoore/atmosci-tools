@@ -1,14 +1,13 @@
 
 import os
-import urllib
-
 import datetime
-from dateutil.relativedelta import relativedelta
+import urllib
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 CACHE_SERVER_BUFFER_MIN = 20
-NDFD_REMOTE_SERVER = 'http://weather.noaa.gov/pub/SL.us008001/ST.opnl/DF.gr2/'
+# discontinued 'http://weather.noaa.gov/pub/SL.us008001/ST.opnl/DF.gr2/'
+NDFD_REMOTE_SERVER = 'http://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/'
 NDFD_FILE_TEMPLATE = 'DC.ndfd/AR.{0}/VP.{1}/ds.{2}.bin'
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -25,7 +24,7 @@ class NDFDFactoryMethods:
     def initNDFD(self, server_url=NDFD_REMOTE_SERVER):
         self.setServerUrl(server_url)
         self.file_template = NDFD_FILE_TEMPLATE
-        self.ndfd_config = self.getSourceConfig('ndfd')
+        self.ndfd_config = self.sourceConfig('ndfd')
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -38,7 +37,7 @@ class NDFDFactoryMethods:
     def timeOfLatestForecast(self):
         latest_time = datetime.datetime.utcnow()
         if latest_time.minute <= CACHE_SERVER_BUFFER_MIN:
-            latest_time = (latest_time - relativedelta(hours=1))
+            latest_time = (latest_time - datetime.timedelta(hours=1))
         return latest_time.replace(minute=0, second=0, microsecond=0)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
