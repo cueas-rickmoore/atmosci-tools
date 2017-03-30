@@ -3,9 +3,14 @@ import datetime
 
 import numpy as N
 
+from atmosci.hdf5.dategrid import Hdf5DateGridFileBuilder
+
+from atmosci.seasonal.methods.grid import hdf5ReaderPatch
+from atmosci.seasonal.methods.timegrid import TimeGridFileManagerMethods
+from atmosci.seasonal.methods.builder  import TimeGridFileBuildMethods
+
 from atmosci.seasonal.grid import SeasonalGridFileReader, \
-                                  SeasonalGridFileManager, \
-                                  SeasonalGridFileBuilder
+                                  SeasonalGridFileManager
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -264,11 +269,20 @@ class TemperatureFileManager(TempextUpdateMethods, SeasonalGridFileManager):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class TemperatureFileBuilder(TempextUpdateMethods, SeasonalGridFileBuilder):
+class TemperatureFileBuilder(TempextUpdateMethods,
+                             TimeGridFileBuildMethods,
+                             TimeGridFileManagerMethods,
+                             Hdf5DateGridFileBuilder):
 
-    def __init__(self, filepath, registry, config, target_year,  source,
-                       region, **kwargs):
-        SeasonalGridFileBuilder.__init__(self, filepath, registry, config,
-                                         'tempexts', source, target_year,
-                                         region, **kwargs)
+    def __init__(self, filepath, registry, config, target_year, source,
+                       region, start_date, end_date, **kwargs):
+        self._preInitProject_(registry)
+        self.preInitBuilder(config, 'tempexts', source, target_year, region,
+                            **kwargs)
+        Hdf5DateGridFileBuilder.__init__(self, filepath, start_date, end_date,
+                                               None, None)
+        hdf5ReaderPatch(self)
+        self.initFileAttributes(**kwargs)
+        self.postInitBuilder(**kwargs)
+        self.close()
 

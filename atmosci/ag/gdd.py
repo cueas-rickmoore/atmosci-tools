@@ -145,6 +145,17 @@ def calcGDD(avgt, threshold):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+def gddThresholdAsString(gdd_threshold):
+    if isinstance(gdd_threshold, (list,tuple)):
+        return ''.join(['%02d' % th for th in gdd_threshold])
+    elif isinstance(gdd_threshold, int):
+        return '%02d' % gdd_threshold
+    elif isinstance(gdd_threshold, basestring):
+        return gdd_threshold
+    else: return str(gdd_threshold)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 def roundGDD(data):
     """ round all values in data array using GDD rounding criteria
     """
@@ -296,6 +307,17 @@ class GDDCalculatorMethods:
         else: # unsupported type
             errmsg = '%s is an unsupported type for "avgt" argument'
             raise TypeError, errmsg % type(avgt)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def gddThresholdAsString(self, gdd_threshold):
+        if isinstance(gdd_threshold, (list,tuple)):
+            return ''.join(['%02d' % th for th in gdd_threshold])
+        elif isinstance(gdd_threshold, int):
+            return '%02d' % gdd_threshold
+        elif isinstance(gdd_threshold, basestring):
+            return gdd_threshold
+        else: return str(gdd_threshold)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

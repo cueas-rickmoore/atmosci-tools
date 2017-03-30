@@ -60,14 +60,19 @@ ConfigObject('regions', CFGBASE)
 CFGBASE.regions.conus = { 'description':'Continental United States',
                           'data':'-125.00001,23.99999,-66.04165,49.95834',
                           'maps':'-125.,24.,-66.25,50.' }
+CFGBASE.regions.flny = { 'description':'NY Finger Lakes',
+                         'data':'-78.0,47.0,-74.5,43.35',
+                         'maps':'-77.9,47.1,-74.6,43.25' }
 CFGBASE.regions.NE = { 'description':'NOAA Northeast Region (U.S.)',
-                       'data':'-82.75,37.125,-66.83,47.70',
+                       'data':'-82.75,37.125,-66.83,47.708',
                        'maps':'-82.70,37.20,-66.90,47.60' }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # default project configuration
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('project', CFGBASE)
+CFGBASE.project.bbox = { 'NE':CFGBASE.regions.NE.data,
+                         'conus':CFGBASE.regions.conus.data }
 CFGBASE.project.compression = 'gzip'
 CFGBASE.project.end_day = (12,31)
 CFGBASE.project.forecast = 'ndfd'

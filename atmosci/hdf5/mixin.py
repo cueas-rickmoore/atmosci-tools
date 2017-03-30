@@ -347,9 +347,6 @@ class Hdf5DataWriterMixin:
         """ Creates a new dataset in the data file and returns a pointer to
         it. Raises IOError exception if the dataset already exists.
         """
-        print 'h5py._createDataset_', parent, dataset_name
-        print kwargs
-        print numpy_array
         dataset_key = self.hdfObjectKey(dataset_name)
         if dataset_key in parent.keys():
             errmsg = "'%s' dataset already exists in current data file."

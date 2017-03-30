@@ -4,6 +4,8 @@ import os, sys
 import datetime
 import warnings
 
+from atmosci.utils.timeutils import asDatetimeDate
+
 from atmosci.tempexts.factory import TempextsProjectFactory
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -79,29 +81,39 @@ else:
 
 # get get temperature data file manger
 manager = factory.tempextsFileManager(start_date.year, source, region, 'r')
-if verbose: print 'temp filepath', manager.filepath
+print 'refreshing temperature extremes in :\n', manager.filepath
 # be sure to request data for the same grid that is already in the file
 acis_grid = manager.datasetAttribute('temps.maxt', 'acis_grid')
 # REFRESH MUST NEVER CHANGE ORIGINAL DATES IN maxt/mint DATASETS !!
-date_attributes = manager.getDateAttributes('temps.maxt')
-last_valid_temp = asDatetimeDate(date_attributes['last_valid_date']
-season_end = asDatetimeDate(manager.fileAttribute('end_date'))
-manager.close()
+last_obs_date = manager.datasetAttribute('temps.maxt', 'last_obs_date')
+last_valid_date = manager.datasetAttribute('temps.maxt', 'last_valid_date')
 
-if end_date:
-    # end_date can never be later than last_valid_date in temps file
-    if end_date > last_valid_temp: end_date = last_valid_temp
-    # end_date can never be later than end of current season
-    if end_date > season_end: end_date = season_end
-    # end_date must be greater than start date
-    if start_date < end_date:
-        num_days = (end_date - start_date).days + 1
-        msg = 'refreshing temperature extremes for %d days : %s thru %s'
-        print msg % (num_days, str(start_date), str(end_date))
-    else: end_date = None
-if end_date is None:
-    print 'refreshing temperature extremes for', str(start_date)
-print 'in :', manager.filepath
+if end_date is not None:
+    # refresh start date cannot be earlier than first day in datasets
+    # this is only relevant at the beginning of a new year
+    data_limit = manager.dateAttribute('temps.maxt', 'start_date')
+    start_date = max (start_date, data_limit)
+    # refresh end date cannot be later the last day in the datasets
+    # this is only relevant at the end of the year
+    data_limit = manager.dateAttribute('temps.maxt', 'end_date')
+    if end_date > data_limit: end_date = data_limit
+    else:
+        # refresh end date cannot be later than the last observation
+        # otherwise, you risk stomping on the forecast
+        end_date = min (end_date, asDatetimeDate(last_obs_date))
+
+    # recalculate actual number of days to be refreshed 
+    num_days = (end_date - start_date).days + 1
+
+    msg = '    refreshing data for %d days : %s thru %s'
+    print msg % (num_days, str(start_date), str(end_date))
+else:
+    if start_date < datetime.date(target_date.year, 1, 1):
+        errmsg = "%s is an invalid date for %d"
+        raise ValueError, errmsg % (str(start_date),target_date.year)
+    print '    refreshing data for', str(start_date)
+
+manager.close()
 
 # filter annoying numpy warnings
 warnings.filterwarnings('ignore',"All-NaN axis encountered")
@@ -117,15 +129,20 @@ data = factory.getAcisGridData(int(acis_grid), 'mint,maxt', start_date,
                                debug=debug)
 if debug: print 'temp data\n', data, '\n'
 
-print 'updating "temps" group in ', manager.filepath
 manager.open('a')
 manager.updateTempGroup(start_date, data['mint'], data['maxt'], source.tag)
 manager.close()
 # REFRESH MUST NEVER CHANGE ORIGINAL last_obs_date or last_valid_date !!
 manager.open('a')
-manager.setDatasetAttributes('temps.maxt', **date_attributes)
-manager.setDatasetAttributes('temps.mint', **date_attributes)
-manager.setDatasetAttributes('temps.provenance', **date_attributes)
+manager.setDatasetAttribute('temps.maxt', 'last_obs_date', last_obs_date)
+manager.setDatasetAttribute('temps.mint', 'last_obs_date', last_obs_date)
+manager.setDatasetAttribute('temps.provenance', 'last_obs_date', last_obs_date)
+manager.close()
+manager.open('a')
+manager.setDatasetAttribute('temps.maxt', 'last_valid_date', last_valid_date)
+manager.setDatasetAttribute('temps.mint', 'last_valid_date', last_valid_date)
+manager.setDatasetAttribute('temps.provenance', 'last_valid_date',
+                            last_valid_date)
 manager.close()
 
 # turn annoying numpy warnings back on

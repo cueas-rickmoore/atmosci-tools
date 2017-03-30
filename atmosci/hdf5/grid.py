@@ -468,9 +468,9 @@ class Hdf5GridFileBuilder(Hdf5GridFileManager):
     Inherits all of the capabilities of Hdf5GridFileManager
     """
 
-    def __init__(self, hdf5_filepath, lons, lats):
+    def __init__(self, hdf5_filepath, lons, lats, mode='w'):
         self._access_authority = ('r','a', 'w')
-        Hdf5GridFileManager.__init__(self, hdf5_filepath, 'w')
+        Hdf5GridFileManager.__init__(self, hdf5_filepath, mode)
         self.setFileAttribute('created', self.timestamp)
 
         # create and initialize coordinate datasets

@@ -9,6 +9,32 @@ GETATTR_FAILED = hash('attribute/object path lookup failed')
 RESERVED = ('__ATTRIBUTES__', '__CHILDREN__', '__RESERVED__', 
             'name', 'parent', 'proper_name')
 
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def configToJson(config_obj, is_child=False):
+    import json
+    if is_child: obj_json = '"%s":' % config_obj.name
+    else: obj_json = '{"%s":' % config_obj.name
+
+    if config_obj.has_attrbutes:
+        obj_json = \
+            '%s%s' % (obj_json,json.dumps(dict(config_obj.attritems())))
+        obj_has_attrs = True
+    else: obj_has_attrs = False
+
+    children = [ ]
+    if config_obj.has_children:
+        if obj_has_attrs: obj_json = obj_json[:-1] + ','
+        else: obj_json += '{'
+        for name, child in config_obj.items():
+            children.append(configToJson(child, True))
+        obj_json = '%s%s}' % (obj_json, ','.join(children))
+
+    if is_child: return obj_json
+    return obj_json.replace(': ',':').replace(', ',',') + '}'
+
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def dictToConfig(dict_, name='config', parent=None):
@@ -494,6 +520,7 @@ class ConfigObject(object):
     def _path_to_list_(self, path):
         if isinstance(path, basestring): return path.split('.')
         elif isinstance(path, (tuple,list)): return path
+        elif isinstance(path, int): return [path,]
         else: 
             errmsg = '%s is an invalid type for "path" argument.'
             raise TypeError, errmsg % type(path)

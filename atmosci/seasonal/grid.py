@@ -1,10 +1,11 @@
 
-from atmosci.hdf5.manager import Hdf5DateGridFileReader
-from atmosci.hdf5.manager import Hdf5DateGridFileManager
+from atmosci.hdf5.dategrid import Hdf5DateGridFileReader,\
+                                  Hdf5DateGridFileManager,\
+                                  Hdf5DateGridFileBuilder
 
 from atmosci.seasonal.methods.builder  import TimeGridFileBuildMethods
-from atmosci.seasonal.methods.timegrid import TimeGridFileReaderMethods
-from atmosci.seasonal.methods.timegrid import TimeGridFileManagerMethods
+from atmosci.seasonal.methods.timegrid import TimeGridFileReaderMethods,\
+                                              TimeGridFileManagerMethods
 
 from atmosci.seasonal.methods.grid import hdf5ReaderPatch
 
@@ -80,4 +81,27 @@ class SeasonalGridFileBuilder(TimeGridFileBuildMethods,
     def _loadManagerAttributes_(self):
         SeasonalGridFileManager._loadManagerAttributes_(self)
         self._loadProjectFileAttributes_()
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class SeasonalDateGridFileBuilder(TimeGridFileBuildMethods,
+                                  TimeGridFileManagerMethods,
+                                  Hdf5DateGridFileBuilder):
+
+    def __init__(self, filepath, filetype, registry, project_config,
+                       target_year, start_date, end_date, source, region,
+                       mode='w', **kwargs):
+        self._preInitProject_(registry)
+        self.preInitBuilder(project_config, filetype, source, target_year,
+                            region, start_date=start_date, end_date=end_date,
+                            **kwargs)
+        lats = kwargs.get('lats',None)
+        lons = kwargs.get('lons',None)
+        Hdf5DateGridFileBuilder.__init__(self, filepath, start_date, end_date,
+                                               lons, lats, mode)
+        hdf5ReaderPatch(self)
+        self.initFileAttributes(**kwargs)
+        self.postInitBuilder(**kwargs)
+        self.close()
 

@@ -37,7 +37,8 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
         attrs = self.datasetAttributes(dataset_path)
         if convert:
             for key in attrs:
-                if key.endswith('date'): dates[key] = datetime.date(attrs[key])
+                if key.endswith('date'):
+                    dates[key] = asDatetimeDate(attrs[key])
         else:
             for key in attrs:
                 if key.endswith('date'): dates[key] = attrs[key]

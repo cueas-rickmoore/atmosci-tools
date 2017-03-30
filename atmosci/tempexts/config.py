@@ -15,23 +15,28 @@ del CFGBASE
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # directory paths
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-CONFIG.dirpaths.project = '/Volumes/data/app_data/shared/grid'
-CONFIG.dirpaths.shared  = '/Volumes/data/app_data/shared'
-CONFIG.dirpaths.static  = '/Volumes/data/app_data/shared/grid/static'
-CONFIG.dirpaths.working = '/Volumes/data/app_data'
-CONFIG.dev_dirpaths = {
-       'project':'/Volumes/Transport/data/app_data/shared/grid',
-       'shared':'/Volumes/Transport/data/app_data/shared',
-       'static':'/Volumes/Transport/data/app_data/shared/grid/static',
-       'working':'/Volumes/Transport/data/app_data',
-       }
+CONFIG.dirpaths.project = \
+       os.sep.join(CONFIG.dirpaths.shared, 'grid')
+CONFIG.modes.dev.dirpaths.project = \
+       os.sep.join(CONFIG.modes.dev.dirpaths.shared, 'grid')
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# GDD project configuration
+# TempExt project datasets
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-CONFIG.project.bbox = { 'NE':'-82.75,37.125,-66.7916,47.708',
-                        'conus':'-125.00001,23.99999,-66.04165,49.95834',
-                      }
+CONFIG.datasets.maxt.dtype = int
+CONFIG.datasets.maxt.dtype_packed ='<i2'
+CONFIG.datasets.maxt.missing_packed = -32768
+CONFIG.datasets.maxt.missing_data = -32768
+
+CONFIG.datasets.mint.dtype = int
+CONFIG.datasets.mint.dtype_packed ='<i2'
+CONFIG.datasets.mint.missing_packed = -32768
+CONFIG.datasets.mint.missing_data = -32768
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# TempRxt project configuration
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 CONFIG.project.compression = 'gzip'
 CONFIG.project.end_day = (12,31)
 CONFIG.project.forecast = 'ndfd'
@@ -43,7 +48,7 @@ CONFIG.project.subdir_path = ('grid','%(region)s','%(source)s','temps')
 CONFIG.project.subproject_by_region = True
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# GDD project file names and file types
+# TempExt project file names and file types
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 CONFIG.filenames.source = '%(year)d-%(source)s-%(region)s-Daily.h5'
 CONFIG.filenames.tempexts = '%(year)d-%(source)s-%(region)s-Daily.h5'

@@ -181,6 +181,13 @@ def decodeIntegerDate(date):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+class DateFormatter(object):
+    def __init__(self, date_format):
+        self.date_format = date_format
+    def __call__(self, date):
+        return asDatetimeDate(date).strftime(self.date_format)
+asFileDateAttr = DateFormatter('%Y-%m-%d')
+
 def asAcisQueryDate(date):
     return asDatetimeDate(date).strftime('%Y-%m-%d')
 
@@ -271,7 +278,7 @@ def dateAsInt(whatever, need_hour=False, need_time=False):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def dateAsString(whatever, date_format='%Y%m%d'):
+def dateAsString(whatever, date_format='%Y-%m-%d'):
     return asDatetime(whatever, True).strftime(date_format)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
