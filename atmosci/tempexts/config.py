@@ -21,21 +21,7 @@ CONFIG.modes.dev.dirpaths.project = \
        os.sep.join(CONFIG.modes.dev.dirpaths.shared, 'grid')
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# TempExt project datasets
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-CONFIG.datasets.maxt.dtype = int
-CONFIG.datasets.maxt.dtype_packed ='<i2'
-CONFIG.datasets.maxt.missing_packed = -32768
-CONFIG.datasets.maxt.missing_data = -32768
-
-CONFIG.datasets.mint.dtype = int
-CONFIG.datasets.mint.dtype_packed ='<i2'
-CONFIG.datasets.mint.missing_packed = -32768
-CONFIG.datasets.mint.missing_data = -32768
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# TempRxt project configuration
+# GDD project configuration
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 CONFIG.project.compression = 'gzip'
 CONFIG.project.end_day = (12,31)
@@ -48,7 +34,7 @@ CONFIG.project.subdir_path = ('grid','%(region)s','%(source)s','temps')
 CONFIG.project.subproject_by_region = True
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# TempExt project file names and file types
+# GDD project file names and file types
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 CONFIG.filenames.source = '%(year)d-%(source)s-%(region)s-Daily.h5'
 CONFIG.filenames.tempexts = '%(year)d-%(source)s-%(region)s-Daily.h5'

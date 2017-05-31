@@ -29,7 +29,7 @@ CONVERSION_FUNCS = {
     , 'dK_to_dF'     : lambda x : x * NINE_FIFTHS
     # US linear measurement units
     , 'ft_to_in'     : lambda x : x * 12.
-    , 'ft_to_mi'     : lambda x : x * 5280.
+    , 'ft_to_mi'     : lambda x : x / 5280.
     , 'in_to_ft'     : lambda x : x * 0.083333
     # metric linear measurement units
     , 'cm_to_km'     : lambda x : x * 0.00001

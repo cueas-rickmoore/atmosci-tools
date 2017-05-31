@@ -11,18 +11,9 @@ from atmosci.utils.timeutils import asAcisQueryDate
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-# ACIS grids built by NRCC are all the same shape
-ACIS_GRID_DIMENSIONS = { 'conus':{'lat':624,'lon':1416},
-                         'NE':{'lat':255,'lon':384} }
-# 0.0416667 is lat/lon increment for ACIS DEM 5k node spacing 
-ACIS_NODE_SPACING = 0.0416667
-# grid diagonal = sqrt(2*0.0416667**2) = 0.05892604
-# node search radius is 1/2 of diagonal = 0.2946302 + a litle fudge
-ACIS_SEARCH_RADIUS = 0.03125
-
-# PRISM has slightly smaller CONUS dimensions that ACIS
-PRISM_GRID_DIMENSIONS = { 'conus':{'lat':621,'lon':1405},
-                          'NE':{'lat':255,'lon':384} }
+# ACIS grids built by NRCC all have the same attributes
+from atmosci.acis.gridinfo import ACIS_GRID_DIMENSIONS, ACIS_NODE_SPACING, \
+                                  ACIS_SEARCH_RADIUS, PRISM_GRID_DIMENSIONS
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -38,34 +29,14 @@ class SeasonalConfig(ConfigObject):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 CFGBASE = SeasonalConfig('seasonal_config', None)
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# directory paths
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-if 'win32' in sys.platform:
-    CFGBASE.dirpaths = { 'shared':'C:\\Work\\app_data\\shared',
-                         'static':'C:\\Work\\app_data\\shared\\static',
-                         'working':'C:\\Work\\app_data' }
-else:
-    CFGBASE.dirpaths = { 'shared':'/Volumes/data/app_data/shared',
-                         'static':'/Volumes/data/app_data/shared/static',
-                         'working':'/Volumes/data/app_data' }
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# regional coordinate bounding boxes for data and maps
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-ConfigObject('regions', CFGBASE)
-CFGBASE.regions.conus = { 'description':'Continental United States',
-                          'data':'-125.00001,23.99999,-66.04165,49.95834',
-                          'maps':'-125.,24.,-66.25,50.' }
-CFGBASE.regions.flny = { 'description':'NY Finger Lakes',
-                         'data':'-78.0,47.0,-74.5,43.35',
-                         'maps':'-77.9,47.1,-74.6,43.25' }
-CFGBASE.regions.NE = { 'description':'NOAA Northeast Region (U.S.)',
-                       'data':'-82.75,37.125,-66.83,47.708',
-                       'maps':'-82.70,37.20,-66.90,47.60' }
+from atmosci.config import ATMOSCFG
+# import any default directory paths
+ATMOSCFG.dirpaths.copy('dirpaths', CFGBASE)
+# inport regional coordinate bounding boxes
+ATMOSCFG.regions.copy('regions', CFGBASE)
+# import mode-dependent defaults
+ATMOSCFG.modes.copy('modes', CFGBASE)
+del ATMOSCFG
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # default project configuration
@@ -217,29 +188,6 @@ CFGBASE.datasets.interp_mask = { 'dtype':bool, 'dtype_packed':bool,
                                 'view':('lat','lon'),
                                 'description':'Interpolation Mask (Use=True)' }
 
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# directory paths
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-ConfigObject('dirpaths', CFGBASE)
-# 
-if 'win32' in sys.platform:
-    CFGBASE.dirpaths.working = 'C:\\Work\\app_data'
-else:
-    CFGBASE.dirpaths.working = '/Volumes/data/app_data'
-    #
-    # set the following parameter to the location of temporary forecast files
-    CFGBASE.dirpaths.forecast = '/Volumes/data/app_data/shared/forecast'
-    # only set the following configuration parameter when multiple apps are
-    # using the same data source file - set it in each application's config
-    # file - NEVER set it in the default (global) config file.
-    # CONFIG.dirpaths.source = '/Volumes/data/app_data/shared'
-    #
-    # set the following parameter when multiple projects share static data
-    # files - it is OK to set this in the global config file
-    CFGBASE.dirpaths.static = '/Volumes/data/app_data/static'
-
-
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # filename templates
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -374,6 +322,16 @@ CFGBASE.sources.prism = { 'acis_grid':21, 'days_behind':1,
                 'grid_dimensions':PRISM_GRID_DIMENSIONS,
                 'node_spacing':ACIS_NODE_SPACING,
                 'search_radius':ACIS_SEARCH_RADIUS }
+
+CFGBASE.sources.ndfd.copy('rtma', CFGBASE.sources)
+CFGBASE.sources.rtma.tag = 'RTMA'
+CFGBASE.sources.rtma.description = 'Real-Time Mesoscale Analysis'
+del CFGBASE.sources.rtma['cache_server']
+del CFGBASE.sources.rtma['download_template']
+
+CFGBASE.sources.rtma.copy('urma', CFGBASE.sources)
+CFGBASE.sources.urma.tag = 'URMA'
+CFGBASE.sources.urma.description = 'Unrestricted Mesoscale Analysis'
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

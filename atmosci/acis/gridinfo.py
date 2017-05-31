@@ -1,4 +1,17 @@
 
+# ACIS grids built by NRCC are all the same shape
+ACIS_GRID_DIMENSIONS = { 'conus':{'lat':624,'lon':1416},
+                         'NE':{'lat':255,'lon':384} }
+# 0.0416667 is lat/lon increment for ACIS DEM 5k node spacing 
+ACIS_NODE_SPACING = 0.0416667
+# grid diagonal = sqrt(2*0.0416667**2) = 0.05892604
+# node search radius is 1/2 of diagonal = 0.2946302 + a litle fudge
+ACIS_SEARCH_RADIUS = 0.03125
+
+# PRISM has slightly smaller CONUS dimensions that ACIS
+PRISM_GRID_DIMENSIONS = { 'conus':{'lat':621,'lon':1405},
+                          'NE':{'lat':255,'lon':384} }
+
 GRID_DESCRIPTIONS = {
             'acis' : 'ACIS station data interpolated with NOAA high res grid input',
        'acishires' : 'ACIS station data interpolated with NOAA high res grid input',

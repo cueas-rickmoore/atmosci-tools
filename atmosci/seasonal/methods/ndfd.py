@@ -42,17 +42,19 @@ class NDFDFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def downloadLatestForecast(self, verbose=False):
+    def downloadLatestForecast(self, filetypes=('maxt','mint'),
+                                     periods=('001-003','004-007'),
+                                     region='conus', verbose=False):
         target_date = self.timeOfLatestForecast()
         filepaths = [ ]
-        for temp_var in ('maxt','mint'):
-            for time_span in ('001-003','004-007'):
+        for filetype in filetypes:
+            for period in periods:
                 remote_uri = \
-                    NDFD_FILE_TEMPLATE.format('conus', time_span, temp_var)
+                    NDFD_FILE_TEMPLATE.format(region, period, filetype)
                 if verbose:
                     print '\ndownloading :', remote_uri
                 local_filepath = self.forecastGribFilepath(self.ndfd_config,
-                                      target_date, time_span, temp_var)
+                                      target_date, period, filetype)
                 if verbose:
                     print 'to :', local_filepath
             
