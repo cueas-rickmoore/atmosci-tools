@@ -70,8 +70,10 @@ class Hdf5DateGridReaderMixin:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def dateAttributes(self, object_path, as_date_obj=False):
-        attrs = self.objectAttributes(object_path)
+    def dateAttributes(self, object_path=None, as_date_obj=False):
+        if object_path is None:
+            attrs = self.fileAttributes()
+        else: attrs = self.objectAttributes(object_path)
         date_attrs = {}
         if as_date_obj:
             for key, value in attrs.items():

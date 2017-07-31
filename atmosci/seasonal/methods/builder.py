@@ -6,10 +6,12 @@ import numpy as N
 
 from atmosci.utils.timeutils import asDatetimeDate, asAcisQueryDate, ONE_DAY
 
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class GridFileBuildMethods:
-    """ Provides common methods requred to build files containing grids
+class FileBuilderMethods:
+    """ 
+    Provides common methods requred to build files containing grids
     with no time/date component.
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -42,29 +44,34 @@ class GridFileBuildMethods:
     def preInitBuilder(self, project_config, filetype, source, region=None,
                              **kwargs):
         self.debug = kwargs.get('debug',False)
-    
-        # initialize private instance attributes
-        self.__config = project_config.copy()
-        self.__filetype = self.config.getFiletype(filetype)
-        if isinstance(source, basestring):
-            self.__source = self.config.sources[source]
-        else: self.__source = source
-        if region is None:
-            region_key = kwargs.get('region', self.__config.project.region)
-            self.__region = self.__config.regions[region_key]
-        else:
-            if isinstance(region, basestring):
-                self.__region = self.__config.regions[region]
-            else: self.__region = region
-
-        self.source_tag = self.__source.tag
 
         # initialize protected instance attributes
         self._access_authority = ('r','a', 'w')
+    
+        # initialize private instance attributes
+        self.__config = project_config.copy()
+        self.__filetype = self.__config.getFiletype(filetype)
+        if isinstance(source, basestring):
+            self.__source = self.__config.sources[source]
+        else: self.__source = source
+        self.source_tag = self.__source.get('tag', self.__source.name)
+
+        if region is None:
+            region_key = kwargs.get('region', self.__config.project.region)
+            self.__region = self.__config.regions[region_key]
+        elif isinstance(region, basestring):
+            self.__region = self.__config.regions[region]
+        else: self.__region = region
+
+        self._additionalPreBuildInit(**kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def postInitBuilder(self, **kwargs):
         pass
 
+    def _additionalPreBuildInit(self, **kwargs):
+        pass
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # REQUIRED - initialize common file attributes
@@ -89,7 +96,7 @@ class GridFileBuildMethods:
             file_attrs['search_radius'] = search_radius
         source_tag = source.get('tag', source.name.upper())
 
-        description = self._getFileDescription(source_tag, **kwargs)
+        description = self._fileDescription(source_tag, **kwargs)
         file_attrs['description'] = description
 
         bbox = kwargs.get('bbox', None)
@@ -129,85 +136,6 @@ class GridFileBuildMethods:
         return self.__source
 
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # build everything
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def build(self, build_groups=True, build_datasets=True, lons=None,
-                    lats=None, **kwargs):
-
-        # initiaize file attributes
-        self.initFileAttributes(**kwargs)
-
-        # build data groups
-        groups = self.filetype.get('groups',None)
-        if groups and build_groups:
-            if self.debug: print 'building file level groups'
-            for group_key in groups:
-                self.open('a')
-                self.buildGroup(group_key, build_datasets, **kwargs)
-                self.close()
-
-        # build file-level datasets
-        datasets = self.filetype.get('datasets',None)
-        # initialze lat and lon datasets if the data was passed
-        if datasets and build_datasets:
-            if lons is not None and lats is not None:
-                self.initLonLatData(lons, lats)
-                datasets = list(datasets)
-                datasets.remove('lon')
-                datasets.remove('lat')
-        # test again, in case lats and lons were the only datasets in the list
-        if datasets and build_datasets:
-            if self.debug: print 'building file level datasets'
-            for dataset_key in datasets:
-                self.open('a')
-                self.buildDataset(dataset_key, **kwargs)
-                self.close()
-
-        # return with file open for updates
-        self.open('a')
-
-
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-    # data group initiailzation methods
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-
-    def buildGroup(self, group_key, build_datasets, root_path=None, **kwargs):
-        group_name, group, group_keydict = self._getGroupConfig(group_key)
-        if group_name not in self._group_names:
-            if root_path is not None:
-                group_path = '%s.%s' % (root_path, group_name)
-            else: group_path = group_name
-            if self.debug: print 'building %s group' % group_path
-
-            attrs = \
-            self._resolveGroupBuildAttributes(group, group_keydict, **kwargs)
-
-            self.open('a')
-            self.createGroup(group_path, **attrs)
-            self.close()
-
-            # build this group's sub-groups
-            groups = group.get('groups', None)
-            if groups:
-                if self.debug: print 'building subgroups of', group_path
-                for name in groups:
-                    self.buildGroup(name, group_path, **kwargs)
-
-            # build this group's datasets
-            datasets = group.get('datasets', None)
-            if datasets and build_datasets:
-                if self.debug: print 'building datasets in group', group_path
-                for dataset_key in datasets:
-                    if 'provenance' in dataset_key:
-                        self.buildProvenance(dataset_key, group_path=group_path,
-                                             **kwargs)
-                    else:
-                        self.buildDataset(dataset_key, group_path,
-                                          group_keydict, **kwargs)
-
-
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
     # dataset build methods
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
@@ -215,19 +143,8 @@ class GridFileBuildMethods:
     def buildDataset(self, dataset_key, group_path=None, group_keydict=None,
                            **kwargs):
         dataset_name, dataset, dataset_keydict = \
-                               self._getDatasetConfig(dataset_key, **kwargs)
-        start_date = kwargs.get('start_date', None)
-        if start_date:
-            if isinstance(start_date, basestring):
-                dataset['start_day'] = \
-                       tuple([int(num) for num in start_date.split('-')[1:]])
-            else: dataset['start_day'] = (start_date.month, start_date.day)
-        end_date = kwargs.get('end_date', None)
-        if end_date:
-            if isinstance(start_date, basestring):
-                dataset['end_day'] = \
-                       tuple([int(num) for num in end_date.split('-')[1:]])
-            else: dataset['end_day'] = (end_date.month, end_date.day)
+                               self._datasetConfig(dataset_key, **kwargs)
+        if self.datasetExistsIn(dataset_name, group_path): return
 
         if group_path is not None:
             dataset_path = '%s.%s' % (group_path, dataset_name)
@@ -263,6 +180,11 @@ class GridFileBuildMethods:
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def initLonLatData(self, lons, lats, **kwargs):
+        """
+        Build the latitude and longitude datasets from information
+        in their configuration records and the data passed in the
+        "lons" and "lats" arguments.
+        """
         # build the latitude dataset
         if not self.hasDataset('lat'):
             self.buildDataset('lat', shape=lats.shape, **kwargs)
@@ -316,7 +238,7 @@ class GridFileBuildMethods:
     # config object access methods
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
-    def _getDatasetConfig(self, dataset_key, **kwargs):
+    def _datasetConfig(self, dataset_key, **kwargs):
         if isinstance(dataset_key,(tuple,list)):
             key, keys = dataset_key
             if 'path' in keys: 
@@ -335,18 +257,26 @@ class GridFileBuildMethods:
         else:
             errmsg = 'Invalid type for dataset key : "%s"' 
             raise TypeError, errmsg % str(dataset_key)
+
+        base = dataset.get('base',None)
+        if base is not None:
+            dataset.inheritAttrs(self.config.datasets[base])
         return name, dataset, keys
+
+    _getDatasetConfig = _datasetConfig # backwards compatibility 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _getFileDescription(self, source_tag, **kwargs):
-        template = self._getFileDescriptionTemplate(self.filetype)
+    def _fileDescription(self, source_tag, **kwargs):
+        template = self._fileDescriptionTemplate(self.filetype)
         descrip_dict = copy(kwargs)
         if 'source' not in descrip_dict: 
             descrip_dict['source'] = source_tag
         return template % descrip_dict
 
-    def _getFileDescriptionTemplate(self, filetype):
+    _getFileDescription = _fileDescription # backwards compatibility
+
+    def _fileDescriptionTemplate(self, filetype):
         if isinstance(filetype, basestring):
             filetype_cfg = self.config.filetypes[filetype]
         else: filetype_cfg = filetype
@@ -354,9 +284,12 @@ class GridFileBuildMethods:
                    '%%(source)s %s' % filetype.name.title())
         return template
 
+    # backwards compatibility
+    _getFileDescriptionTemplate = _fileDescriptionTemplate
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _getGroupConfig(self, group_key):
+    def _groupConfig(self, group_key):
         if isinstance(group_key,(tuple,list)):
             key = group_key[0]
             key_dict = deepcopy(group_key[1])
@@ -377,9 +310,11 @@ class GridFileBuildMethods:
 
         return name, group, key_dict
 
+    _getGroupConfig = _groupConfig # backwards compatibility
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _getSourceDimensions(self):
+    def _sourceDimensions(self):
         dimensions = self.source.get('grid_dimensions', None)
         if dimensions is not None:
             lat_dim = dimensions.get('lat', None)
@@ -392,8 +327,13 @@ class GridFileBuildMethods:
             'Cannot determine dimensions of grid in %s source or %s region'
         raise KeyError, errmsg % (self.source.tag, self.region.name)
 
-    def _getMappedView(self, dataset):
+    _getSourceDimensions = _sourceDimensions 
+    # backwards compatibility
+
+    def _mappedDatasetView(self, dataset):
         return self.config.view_map.attrs[dataset.view]
+
+    _getMappedView = _mappedDatasetView # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -437,7 +377,8 @@ class GridFileBuildMethods:
             updated = self._timestamp_(updated)
         attrs['updated'] = updated
 
-        source_tag = kwargs.get('source_tag', self.source.tag)
+        source_tag = kwargs.get( 'source_tag', self.source.get('tag',
+                                 self.source.name) )
         attrs['source'] = source_tag
         return attrs
 
@@ -455,9 +396,12 @@ class GridFileBuildMethods:
                 if key not in _keydict_: _keydict_[key] = value
 
         attrs = self._resolveCommonAttributes(**kwargs)
-        attrs['description'] = dataset_config.description % _keydict_
+        attrs['description'] = \
+            self._resolveDatasetDescription(dataset_config, **_keydict_)
         attrs.update(self._resolveSourceAttributes(**kwargs))
         attrs.update(self._resolveScopeAttributes(dataset_config, **kwargs))
+        time_attrs = self._resolveTimeAttributes(dataset_config, **kwargs)
+        if time_attrs: attrs.update(time_attrs)
  
         shape = _keydict_.get('shape', None)
         if shape is None: 
@@ -467,9 +411,6 @@ class GridFileBuildMethods:
             view = dataset_config.get('view', None)
 
         if view is not None: attrs['view'] = view
-
-        time_attrs = self._resolveTimeAttributes(dataset_config, **kwargs)
-        if time_attrs: attrs.update(time_attrs)
 
         dtype = dataset_config.dtype
         packed_dtype = dataset_config.get('dtype_packed', dtype)
@@ -521,6 +462,11 @@ class GridFileBuildMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def _resolveDatasetDescription(self, dataset, **kwargs):
+        return dataset.description % kwargs
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def _resolveGroupBuildAttributes(self, group, group_keydict, **kwargs):
         attrs = self._resolveCommonAttributes(**kwargs)
         attrs.update(self._resolveSourceAttributes(**kwargs))
@@ -543,19 +489,14 @@ class GridFileBuildMethods:
         period = kwargs.get('period', dataset_config.get('period',None))
         if period is None: return attrs
         attrs['period'] = period
-        if period == 'date':
-            attrs.update(self._resolveDateAttributes(dataset_config, **kwargs))
-        elif period == 'doy':
-            attrs.update(self._resolveDoyAttributes(dataset_config, **kwargs))
-        else:
-            attrs['interval'] = kwargs.get('interval', dataset_config.get('interval',1))
         return attrs
  
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _resolveSourceAttributes(self, **kwargs):
         source = self.source
-        attrs = { 'source':kwargs.get('source_tag', source.tag) }
+        attrs = { 'source':kwargs.get('source_tag',
+                                  source.get('tag', source.name)) }
 
         acis_grid = source.get('acis_grid', None)
         if acis_grid is not None:
@@ -579,7 +520,7 @@ class GridFileBuildMethods:
  
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _resolveTimeAttributes(self, dataset_config, **kwargs):
+    def _resolveTimeAttributes(self, object_config, **kwargs):
         attrs = { }
         return attrs
 
@@ -587,8 +528,8 @@ class GridFileBuildMethods:
 
     def _shapeForDataset(self, dataset):
         errmsg = "Cannot unravel dimension '%s'"
-        source_dimensions = self._getSourceDimensions()
-        view = self._getMappedView(dataset)
+        source_dimensions = self._sourceDimensions()
+        view = self._mappedDatasetView(dataset)
 
         shape = [ ]
         for dim in dataset.view:
@@ -606,8 +547,264 @@ class GridFileBuildMethods:
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class TimeGridFileBuildMethods(GridFileBuildMethods):
-    """ Provides additional methods required to build files containing time
+class GridFileBuildMethods(FileBuilderMethods):
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # build everything
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def build(self, build_groups=True, build_datasets=True, lons=None,
+                    lats=None, **kwargs):
+
+        # initiaize file attributes
+        self.initFileAttributes(**kwargs)
+
+        # build data groups
+        groups = self.filetype.get('groups',None)
+        if groups and build_groups:
+            if self.debug: print 'building file level groups'
+            for group_key in groups:
+                if not self.groupExists(group_key):
+                    self.open('a')
+                    self.buildGroup(group_key, build_datasets, **kwargs)
+                    self.close()
+
+        # build file-level datasets
+        datasets = self.filetype.get('datasets',None)
+        # initialze lat and lon datasets if the data was passed
+        if datasets and build_datasets:
+            if lons is not None and lats is not None:
+                self.initLonLatData(lons, lats)
+                datasets = list(datasets)
+                datasets.remove('lon')
+                datasets.remove('lat')
+        # test again, in case lats and lons were the only datasets in the list
+        if datasets and build_datasets:
+            if self.debug: print 'building file level datasets'
+            for dataset_key in datasets:
+                self.open('a')
+                self.buildDataset(dataset_key, **kwargs)
+                self.close()
+
+        # return with file open for updates
+        self.open('a')
+
+
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+    # data group initiailzation methods
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+
+    def buildGroup(self, group_key, build_datasets, root_path=None, **kwargs):
+        group_name, group, group_keydict = self._groupConfig(group_key)
+        if self.groupExists(group_name, root_path): return
+        
+        if root_path is not None:
+            group_path = '%s.%s' % (root_path, group_name)
+        else: group_path = group_name
+        if self.debug: print 'building %s group' % group_path
+
+        attrs = \
+            self._resolveGroupBuildAttributes(group, group_keydict, **kwargs)
+
+        self.open('a')
+        self.createGroup(group_path, **attrs)
+        self.close()
+
+        # build this group's sub-groups
+        groups = group.get('groups', None)
+        if groups:
+            if self.debug: print 'building subgroups of', group_path
+            for name in groups:
+                self.buildGroup(name, group_path, **kwargs)
+
+        # build this group's datasets
+        datasets = group.get('datasets', None)
+        if datasets and build_datasets:
+            if self.debug: print 'building datasets in group', group_path
+            for dataset_key in datasets:
+                self.buildDataset(dataset_key, group_path, group_keydict,
+                                  **kwargs)
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class ProvenanceBuilderMethods(FileBuilderMethods):
+
+    def preInitBuilder(self, project_config, filetype, source, region, 
+                             **kwargs):
+        FileBuilderMethods.preInitBuilder(self, project_config, filetype,
+                                                source, region, **kwargs)
+        if "provenance" in self.config \
+        and 'generators' in self.config.provenance:
+            self.prov_generators = self.config.provenance.generators
+        else: self.prov_generators = { }
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # build everything
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def build(self, build_groups=True, build_datasets=True, lons=None,
+                    lats=None, **kwargs):
+
+        # initiaize file attributes
+        self.initFileAttributes(**kwargs)
+
+        # build data groups
+        groups = self.filetype.get('groups',None)
+        if groups and build_groups:
+            if self.debug: print 'building file level groups'
+            for group_key in groups:
+                if not self.groupExists(group_key):
+                    self.open('a')
+                    self.buildGroup(group_key, build_datasets, **kwargs)
+                    self.close()
+
+        # build file-level datasets
+        datasets = self.filetype.get('datasets',None)
+        # initialze lat and lon datasets if the data was passed
+        if datasets and build_datasets:
+            if lons is not None and lats is not None:
+                self.initLonLatData(lons, lats)
+                datasets = list(datasets)
+                datasets.remove('lon')
+                datasets.remove('lat')
+        # test again, in case lats and lons were the only datasets in the list
+        if datasets and build_datasets:
+            if self.debug: print 'building file level datasets'
+            for dataset_key in datasets:
+                self.open('a')
+                if 'provenance' in dataset_key:
+                    self.buildProvenance(dataset_key, **kwargs)
+                else: self.buildDataset(dataset_key, **kwargs)
+                self.close()
+
+        # return with file open for updates
+        self.open('a')
+
+
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+    # data group initiailzation methods
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+
+    def buildGroup(self, group_key, build_datasets, root_path=None, **kwargs):
+        group_name, group, group_keydict = self._groupConfig(group_key)
+        if self.groupExists(group_name, root_path): return
+
+        if root_path is not None:
+            group_path = '%s.%s' % (root_path, group_name)
+        else: group_path = group_name
+        if self.debug: print 'building %s group' % group_path
+
+        attrs = \
+            self._resolveGroupBuildAttributes(group, group_keydict, **kwargs)
+
+        self.open('a')
+        self.createGroup(group_path, **attrs)
+        self.close()
+
+        # build this group's sub-groups
+        groups = group.get('groups', None)
+        if groups:
+            if self.debug: print 'building subgroups of', group_path
+            for name in groups:
+                self.buildGroup(name, build_datasets, group_path, **kwargs)
+
+        # build this group's datasets
+        datasets = group.get('datasets', None)
+        if datasets and build_datasets:
+            if self.debug: print 'building datasets in group', group_path
+            for dataset_key in datasets:
+                if 'provenance' in dataset_key:
+                    self.buildProvenance(dataset_key, group_path=group_path,
+                                         **kwargs)
+                else:
+                    self.buildDataset(dataset_key, group_path, group_keydict,
+                                      **kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # dataset build methods
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def buildProvenance(self, provenance_key, **kwargs):
+        dataset_name, reference, prov_config, prov_views = \
+                                  self._provenanceConfig(provenance_key)
+        group_name = kwargs.get('group_name', None)
+        group_path = kwargs.get('group_path', group_name)
+        if self.datasetExistsIn(dataset_name, group_path): return
+
+        if group_path is not None:
+            dataset_path = '%s.%s' % (group_path ,dataset_name)
+        else: dataset_path = dataset_name
+
+        attrs = self._resolveProvenanceBuildAttributes(prov_config, **kwargs)
+        description = attrs.get('description', None)
+        if description is None:
+            if group_name is not None:
+                attrs['description'] = 'Provenance for %s' % group_name
+            else: attrs['description'] = 'Provenance for %s' % dataset_name
+        if reference is not None: attrs['reference'] = reference
+
+        records = self.generateEmptyProvenance(prov_config, attrs)
+
+        names = prov_config.names
+        formats = prov_config.formats
+        provenance = N.rec.fromrecords(records, shape=(len(records),),
+                                       formats=formats, names=names)
+        self.open('a')
+        self.createDataset(dataset_path, provenance, raw=True)
+        self.setDatasetAttributes(dataset_path, **attrs)
+        self.close()
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def generateEmptyProvenance(self, prov_config, attrs):
+        num_records = prov_config.get('num_records',
+                                      attrs.get('num_records', None))
+        errmsg = 'Cannot determine number of provenance records from arguments'
+        assert(num_records is not None), errmsg
+        errmsg = 'Need number of records > 0 to generate empty provenance'
+        assert(num_records > 0), errmsg
+        empty_record = prov_config.empty
+        return [empty_record for record in range(num_records)]
+
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+    # provenance dataset config and generators
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+
+    def _provenanceConfig(self, provenance_key):
+        reference = None
+        if ':' in provenance_key:
+            parts = provenance_key.split(':')
+            if len(parts) == 2: name, key = parts
+            elif len(parts) == 3: name, reference, key = parts
+        else: name = key = provenance_key
+        prov_config = self.config.provenance.types[key].copy()
+        views = self.config.provenance.views
+        return prov_config.get('path', name), reference, prov_config, views
+    _getProvenanceConfig = _provenanceConfig # backwards compatibility
+
+    def _provenanceGenerator(self, provenance_key):
+        return self.prov_generators[provenance_key]
+    _getProvenanceGenerator = _provenanceGenerator # backwards compatibility
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _resolveProvenanceBuildAttributes(self, prov_config, **kwargs):
+        attrs = self._resolveCommonAttributes(**kwargs)
+        attrs['description'] = prov_config.get('description', None)
+        attrs['key'] = prov_config.name
+        view = prov_config.names[0]
+        attrs.update(self._resolveScopeAttributes(prov_config, **kwargs))
+        attrs['generator'] = \
+            kwargs.get('generator', prov_config.get('generator', attrs['key']))
+        return attrs
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class TimeGridFileBuildMethods(ProvenanceBuilderMethods):
+    """
+    Provides additional methods required to build files containing time
     series grids.
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -643,12 +840,8 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
 
     def preInitBuilder(self, project_config, filetype, source, target_year,
                              region, **kwargs):
-        GridFileBuildMethods.preInitBuilder(self, project_config, filetype,
-                                                  source, region, **kwargs)
-        if "provenance" in self.config:
-            self.prov_generators = self.config.provenance.generators
-        else: self.prov_generators = { }
-
+        ProvenanceBuilderMethods.preInitBuilder(self, project_config, filetype,
+                                                      source, region, **kwargs)
         if target_year is not None:
             self.preInitTimeAttributes(target_year, **kwargs)
 
@@ -685,61 +878,17 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
         attrs['num_days'] = self.num_days
         return attrs
 
-
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # dataset build methods
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def buildProvenance(self, provenance_key, **kwargs):
-        dataset_name, prov_config, prov_views = \
-                                  self._getProvenanceConfig(provenance_key)
-
-        group_name = kwargs.get('group_name', None)
-        group_path = kwargs.get('group_path', group_name)
-        if group_path is not None:
-            dataset_path = '%s.%s' % (group_path ,dataset_name)
-        else: dataset_path = dataset_name
-
-        attrs = self._resolveProvenanceBuildAttributes(prov_config, **kwargs)
-        description = attrs.get('description', None)
-        if description is None:
-            if group_name is not None:
-                attrs['description'] = 'Provenance for %s' % group_name
-            else: attrs['description'] = 'Provenance for %s' % dataset_name
-
-        names = prov_config.names
-        time_view = names[0]
+    
+    def generateEmptyProvenance(self, prov_config, attrs):
+        time_view = prov_config.names[0]
         if time_view in prov_views.date:
-            records = self._generateEmptyDateProvenance(prov_config, attrs)
+            return self._generateEmptyDateProvenance(prov_config, attrs)
         elif time_view in prov_views.doy:
-            records = self._generateEmptyDoyProvenance(prov_config, attrs)
+            return self._generateEmptyDoyProvenance(prov_config, attrs)
         else:
             empty_record = prov_config.empty
-            records = [empty_record for day in range(num_days)]
-
-        formats = prov_config.formats
-        provenance = N.rec.fromrecords(records, shape=(len(records),),
-                                       formats=formats, names=names)
-        self.open('a')
-        self.createDataset(dataset_path, provenance, raw=True)
-        self.setDatasetAttributes(dataset_path, **attrs)
-        self.close()
-
-
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-    # provenance dataset config and generators
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-
-    def _getProvenanceConfig(self, provenance_key):
-        if ':' in provenance_key:
-            name, key = provenance_key.split(':')
-        else: name = key = provenance_key
-        prov_config = self.config.provenance.types[key].copy()
-        views = self.config.provenance.views
-        return prov_config.get('path', name), prov_config, views
-
-    def _getProvenanceGenerator(self, provenance_key):
-        return self.prov_generators[key]
+            return [empty_record for day in range(self.num_days)]
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -761,7 +910,7 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
         record_tail = provenance.empty[1:]
         doy_type = N.dtype(provenance.empty[0])
         start_doy = self._startDoy(attrs)
-        for day_num in range(num_days):
+        for day_num in range(self.num_days):
             record = (doy_type.type(start_doy+day_num),) + record_tail
             records.append(record)
         return records
@@ -769,6 +918,31 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
     # attribute resolution methods
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+
+    def _shapeForDataset(self, dataset):
+        source_dimensions = self._sourceDimensions()
+        view = self._mappedDatasetView(dataset)
+
+        shape = [ ]
+        for dim in dataset.view:
+            if isinstance(dim, basestring):
+                if dim == 'time':
+                    period = dataset.get('period','date')
+                    if period in ('date','doy'):
+                        shape.append(self.num_days)
+                    elif period == 'year':
+                        shape.append(self.num_years)
+                elif dim in source_dimensions.attrs:
+                    shape.append(source_dimensions[dim])
+                else:
+                    raise ValueError, "Cannot unravel dimension '%s'" % dim
+            elif isinstance(dim, int):
+                shape.append(dim)
+            else:
+                raise ValueError, "Cannot unravel dimension '%s'" % str(dim)
+        return view, tuple(shape)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _resolveDateAttributes(self, dataset, **kwargs):
         time_attrs = { }
@@ -811,13 +985,10 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _resolveProvenanceBuildAttributes(self, prov_config, **kwargs):
-        attrs = self._resolveCommonAttributes(**kwargs)
-        attrs['description'] = prov_config.get('description', None)
-        attrs['key'] = prov_config.name
-        view = prov_config.names[0]
-        attrs.update(self._resolveScopeAttributes(prov_config, **kwargs))
-        attrs['generator'] = \
-            kwargs.get('generator', prov_config.get('generator', attrs['key']))
+        inherit = ProvenanceBuilderMethods
+        attrs = \
+        inherit._resolveProvenanceBuildAttributes(self, prov_config, **kwargs)
+        view = attrs['view']
         if view in ('date','obs_date','obsdate'):
             attrs.update(self._resolveDateAttributes(prov_config, **kwargs))
         elif view == 'doy':
@@ -826,7 +997,22 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
             errmsg = 'Cannot resolve proveance attributes for "%s" time units'
             raise ValueError, errmsg % view
         return attrs
- 
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    def _resolveScopeAttributes(self, dataset_config, **kwargs):
+        inherit = ProvenanceBuilderMethods
+        attrs = inherit._resolveScopeAttributes(self, dataset_config, **kwargs)
+        #if period == 'date':
+        #    attrs.update(self._resolveDateAttributes(dataset_config, **kwargs))
+        #elif period == 'doy':
+        #    attrs.update(self._resolveDoyAttributes(dataset_config, **kwargs))
+        #else:
+        if 'period' in attrs:
+            if attrs['period'] not in ('date','doy'):
+                attrs['interval'] = \
+                     kwargs.get('interval', dataset_config.get('interval',1))
+        return attrs
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _resolveTimeAttributes(self, dataset_config, **kwargs):
@@ -842,31 +1028,6 @@ class TimeGridFileBuildMethods(GridFileBuildMethods):
             errmsg = '"%s" %s "%s"' % (dataset_config.name, errmsg, period)
             raise ValueError, errmsg
  
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _shapeForDataset(self, dataset):
-        source_dimensions = self._getSourceDimensions()
-        view = self._getMappedView(dataset)
-
-        shape = [ ]
-        for dim in dataset.view:
-            if isinstance(dim, basestring):
-                if dim == 'time':
-                    period = dataset.get('period','date')
-                    if period in ('date','doy'):
-                        shape.append(self.num_days)
-                    elif period == 'year':
-                        shape.append(self.num_years)
-                elif dim in source_dimensions.attrs:
-                    shape.append(source_dimensions[dim])
-                else:
-                    raise ValueError, "Cannot unravel dimension '%s'" % dim
-            elif isinstance(dim, int):
-                shape.append(dim)
-            else:
-                raise ValueError, "Cannot unravel dimension '%s'" % str(dim)
-        return view, tuple(shape)
-
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
     # file time initialization methods
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #

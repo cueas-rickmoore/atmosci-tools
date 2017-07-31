@@ -13,7 +13,15 @@ from atmosci.utils.timeutils import timeSpanToIntervals, yearFromDate
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class BasicProjectFactoryMethods:
+class MinimalFactoryMethods:
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def completeInitialization(self, **kwargs):
+        """ Pass thru so derived classes can assert minor initialization
+        requirements.
+        """
+        pass
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # configuration access functions 
@@ -34,7 +42,7 @@ class BasicProjectFactoryMethods:
 
     def datasetConfig(self, dataset_key):
         return self.config.datasets[dataset_key]
-    getDatasetConfig = datasetConfig
+    getDatasetConfig = datasetConfig # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -48,25 +56,25 @@ class BasicProjectFactoryMethods:
         else:
             ft_cfg = self.config.filetypes.get(filetype_key, None)
         return ft_cfg
-    getFiletypeConfig = filetypeConfig
+    getFiletypeConfig = filetypeConfig # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def groupConfig(self, group_key):
         return self.config.groups[group_key]
-    getGroupConfig = groupConfig
+    getGroupConfig = groupConfig # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def projectConfig(self):
         return self.config.project
-    getProjectConfig = projectConfig
+    getProjectConfig = projectConfig # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def provenanceConfig(self, provenance_key):
         return self.config.provenance[provenance_key]
-    getProvenanceConfig = provenanceConfig
+    getProvenanceConfig = provenanceConfig # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -82,12 +90,39 @@ class BasicProjectFactoryMethods:
             errmsg = "Region key was not passed to function and no default" 
             errmsg = "%s was found in the configuration object." % errmsg
             raise ValueError, errmsg
-    getRegionConfig = regionConfig
+    getRegionConfig = regionConfig # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def registryConfig(self): return self.registry
-    getRegistryConfig = registryConfig
+    getRegistryConfig = registryConfig # backwards compatibility
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setProjectConfig(self, project='project'):
+        errmsg = None
+        if project == 'project':
+            proj_obj = self.config.get('project', None)
+            if proj_obj is None:
+                errmsg = '"self.config.project is not defined.'
+            else: self.project = proj_obj
+        elif isinstance(project, ConfigObject):
+            self.project = project.copy('project',None)
+        elif isinstance(project, basestring):
+            if projects in self.config:
+                proj_obj = self.config.projects.get(project, None)
+                if proj_obj is None:
+                    errmsg = 'self.config.projects.%s is not defined'
+                    errmsg = errmsg % project
+                else: self.project = proj_obj
+            else:
+                errmsg = 'self.config.projects is not defined'
+        else:
+            errmsg = '%s is an invalid type for the "project" argument'
+            raise TypeError, errmsg % str(type(project))
+        
+        if errmsg is not None:
+            raise LookupError, errmsg
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     
@@ -101,9 +136,9 @@ class BasicProjectFactoryMethods:
             raise KeyError, errmsg % key
         else:
             errmsg = "Source key was not passed to function and no default" 
-            errmsg = "%s was found in the configuration object." % errmsg
+            errmsg = "%s was found in the project configuration." % errmsg
             raise ValueError, errmsg
-    getSourceConfig = sourceConfig
+    getSourceConfig = sourceConfig # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -115,6 +150,81 @@ class BasicProjectFactoryMethods:
         else:
             errmsg = 'Unsupported type for "source" argument : %s'
             return TypeError, errmsg % str(type(source))
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def timestamp(self, as_file_path=False):
+        if as_file_path:
+            return datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        else: return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def useDirpathsForMode(self, mode='default'):
+        """
+        Set the directory paths for this instance to those used by the
+        project mode passed. If the mode argument is not passed, the
+        default directory paths for the project will be used.
+        """
+        mode_path = 'modes.%s' % mode
+        mode_cfg = self.config.get(mode_path, None)
+        if mode_cfg is None:
+            errmsg = '"self.config.modes.%s" is not defined.'
+            raise KeyError, errmsg % mode
+
+        dirpaths = mode_cfg.get('dirpaths', None)
+        if dirpaths is None:
+            errmsg = '"self.config.modes.%s.dirpaths" is not configured.'
+            raise KeyError, errmsg % mode
+        
+        self.config.dirpaths.update(dirpaths)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _registerAccessClasses(self):
+        raise NotImplementedError
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _registerAccessManager(self, file_type, mgr_type, accessor_class):
+        accessor = '%s.%s' % (file_type, mgr_type)
+        self.AccessClasses[accessor] = accessor_class
+
+    def _registerAccessManagers(self, file_type, reader, manager, builder):
+        self.AccessClasses[file_type] = \
+             { 'read':reader, 'manage':manager, 'build':builder }
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _initFileManagerClasses_(self):
+        # create a dictionary for registration of file access classes
+        if not hasattr(self, 'AccessClasses'):
+            self.AccessClasses = ConfigObject('AccessClasses', None)
+        # register the factory-specific accessors
+        self._registerAccessClasses()
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _initFactoryConfig_(self, config_object, registry_object=None,
+                                  project=None):
+        self.config = config_object.copy()
+
+        if project is None:
+            self.setProjectConfig('project')
+        else: self.setProjectConfig(project)
+
+        if registry_object is not None:
+            self.registry = registry_object.copy()
+        else: self.registry = None
+
+        # initilaize file access managers
+        self._initFileManagerClasses_()
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class BasicProjectFactoryMethods(MinimalFactoryMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # date and time span utilities
@@ -190,13 +300,6 @@ class BasicProjectFactoryMethods:
         start_date = self.seasonStartDate(target_year)
         return start_date, end_date
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def timestamp(self, as_file_path=False):
-        if as_file_path:
-            return datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        else: return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -204,71 +307,15 @@ class BaseProjectFactory(BasicProjectFactoryMethods, object):
     """ Base class containing functions common to all factory subclasses.
     """
 
-    def __init__(self, config_object, registry_object=None, project=None):
-        self.config = config_object.copy()
-
-        if project is None:
-            self.project = self.config.project
-        elif isinstance(project, ConfigObject):
-            self.project = project.copy('project',None)
-        elif isinstance(project, basestring):
-            if projects in self.config:
-                proj = self.config.projects.get(project, None)
-                if proj is None:
-                    msg = '"%s" project not found in config.projects'
-                    raise AttributeError, msg % project
-                self.project = proj.copy()
-            else:
-                raise LookupError, '"projects" object not found in config'
-        else:
-            msg = '%s is an invalid type for the "project" argument'
-            raise TypeError, msg % str(type(project))
-
-        if registry_object is not None:
-            self.registry = registry_object.copy()
-        else: self.registry = None
+    def __init__(self, config_object, registry_object=None, project=None,
+                       **kwargs):
+        self._initFactoryConfig_(config_object, registry_object, project)
 
         # allow override of targetYearFromDate() from project's config object
         tyFunction = config_object.get('targetYearFromDate', None)
         if tyFunction is not None:
             self.targetYearFromDate = tyFunction
 
-        # initilaize file access managers
-        self._initFileManagerClasses_()
-
         # simple hook for subclasses to initialize additonal attributes  
-        self.completeInitialization()
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def completeInitialization(self):
-        """ Pass thru so derived classes can assert minor initialization
-        requirements.
-        """
-        pass
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _initFileManagerClasses_(self):
-        # create a dictionary for registration of file access classes
-        if not hasattr(self, 'AccessClasses'):
-            self.AccessClasses = ConfigObject('AccessClasses', None)
-        # register the factory-specific accessors
-        self._registerAccessClasses()
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _registerAccessClasses(self):
-        raise NotImplementedError
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _registerAccessManager(self, file_type, mgr_type, accessor_class):
-        accessor = '%s.%s' % (file_type, mgr_type)
-        self.AccessClasses[accessor] = accessor_class
-
-    def _registerAccessManagers(self, file_type, reader, manager, builder):
-        self.AccessClasses[file_type] = \
-             { 'read':reader, 'manage':manager, 'build':builder }
-
+        self.completeInitialization(**kwargs)
 

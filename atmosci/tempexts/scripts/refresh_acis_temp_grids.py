@@ -46,7 +46,7 @@ num_date_args = len(args)
 if num_date_args == 0: # date span based on current day
     target_date = datetime.date.today()
     if days_ago: # refresh number of days ago ending yesterday
-        end_date = target_date - datetime.timedelta(days=1)
+        end_date = target_date # - datetime.timedelta(days=1)
         start_date = target_date - datetime.timedelta(days=days_ago)
     elif num_days: # refresh num_days beginning today
         start_date = target_date

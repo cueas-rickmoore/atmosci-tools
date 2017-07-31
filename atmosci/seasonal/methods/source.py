@@ -93,7 +93,7 @@ class SourceFileAccessorMethods:
     # source directory & file paths
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def sourceGridDir(self, source, region=None, data_type=None):
+    def sourceGridDir(self, source, region=None, data_type=None, **kwargs):
         shared = self.project.get('shared_source', False)
         if shared:
             source_dir = self.sharedRootDir('grid')
@@ -108,7 +108,11 @@ class SourceFileAccessorMethods:
             os.path.join(source_dir, self.sourceToDirpath(source))
         if data_type is not None:
             source_dir = os.path.join(source_dir, data_type)
-        if not os.path.exists(source_dir): os.makedirs(source_dir)
+        if not os.path.exists(source_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Source grid directory does not exist :\n%s'
+                raise IOError, errmsg % source_dir
+            else: os.makedirs(source_dir)
         return source_dir
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

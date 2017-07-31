@@ -1,10 +1,9 @@
-#! /Volumes/projects/venvs/test/bin/python
+#! /usr/bin/env python
 
 import os, sys
 import warnings
 
 import datetime
-ONE_DAY = datetime.timedelta(days=1)
 
 from atmosci.tempexts.factory import TempextsProjectFactory
 
@@ -12,6 +11,9 @@ from atmosci.tempexts.factory import TempextsProjectFactory
 
 from optparse import OptionParser
 parser = OptionParser()
+
+parser.add_option('-f', action='store_true', dest='update_forecast',
+                  default=False)
 
 parser.add_option('-r', action='store', dest='region', default=None)
 parser.add_option('-s', action='store', dest='source', default=None)
@@ -22,68 +24,59 @@ options, args = parser.parse_args()
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-current_year = datetime.date.today().year
+print '\ndownload_source_temp_grids.py', args
 
 debug = options.debug
+update_forecast = options.update_forecast
 verbose = options.verbose or debug
-print '\ndownload_source_temp_grids.py', args
 
 factory = TempextsProjectFactory()
 project = factory.projectConfig()
 
 region = factory.regionConfig(options.region)
-source = factory.ourceConfig(options.source)
-
-latest_available_date = factory.latestAvailableDate(source)
-latest_available_time = \
-    factory.latestAvailableTime(source, latest_available_date)
-if latest_available_time > datetime.datetime.now():
-    latest_available_date = latest_available_date - ONE_DAY
+source = factory.sourceConfig(options.source)
 
 end_date = None
-num_args = len(args)
-if num_args == 0:
-    end_date = datetime.date.today()
-    target_year = end_date.year
-    start_date = None
-elif num_args in (3,5):
-    target_year = int(args[0])
+num_date_args = len(args)
+if num_date_args == 0:
+    start_date = datetime.date.today()
+elif num_date_args == 3:
+    year = int(args[0])
     month = int(args[1])
     day = int(args[2])
-    start_date = datetime.date(target_year,month,day)
-    if num_args == 5:
-        month = int(args[3])
-        day = int(args[4])
-        end_date = datetime.date(target_year,month,day)
+    start_date = datetime.date(year,month,day)
+elif num_date_args in (4,5,6):
+    year = int(args[0])
+    month = int(args[1])
+    start_date = datetime.date(year,month,int(args[2]))
+    if num_date_args == 4:
+        end_date = datetime.date(year,month,int(args[3]))
+    if num_date_args == 5:
+        end_date = datetime.date(year, int(args[3]),int(args[4]))
+    elif num_date_args == 6:
+        end_date = datetime.date(int(args[3]),int(args[4]),int(args[5]))
 else:
-    errmsg = 'Invalid number of arguments (%d).' % num_args
-    raise SyntaxError, errmsg
-
-first_day_of_year = datetime.date(target_year,1,1)
+    print sys.argv
+    errmsg = 'Invalid number of date arguments (%d).' % num_date_args
+    raise ValueError, errmsg
 
 # get a temperature data file manger
+target_year = factory.targetYearFromDate(start_date)
 filepath = factory.tempextsFilepath(target_year, source, region)
 if debug:
     print 'temp filepath', os.path.exists(os.path.normpath(filepath)), filepath
 if not os.path.exists(os.path.normpath(filepath)):
-    manager = \
-        factory.tempextsFileBuilder(source, target_year, region, 'temps')
-    if start_date is None: start_date = datetime.date(target_year,1,1)
-else:
-    manager = factory.tempextsFileManager(source, target_year, region,
-                                           'temps', mode='r')
-    if start_date is None:
-        last_obs_date = manager.dateAttribute('temps.maxt',
-                                                    'last_obs_date', None)
-        if last_obs_date is not None:
-            start_date = last_obs_date - ONE_DAY
-            if start_date < first_day_of_year: start_date = first_day_of_year
-        else: start_date = datetime.date(target_year,1,1)
+    manager = factory.tempextsFileBuilder(target_year, source, region)
+else: manager = factory.tempextsFileManager(target_year, source, region, 'r')
 
 acis_grid = manager.datasetAttribute('temps.maxt', 'acis_grid')
 manager.close()
 
-if end_date is None: end_date = latest_available_date
+# get the last possible date that data might be available from this source
+latest_available_date = factory.latestAvailableDate(source)
+if end_date is None or end_date > latest_available_date:
+    end_date = latest_available_date
+
 if end_date == start_date:
     msg = 'downloding %s temps for %s'
     print msg % (source.tag, start_date.strftime('%B %d, %Y'))  

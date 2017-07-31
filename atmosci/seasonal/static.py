@@ -8,7 +8,19 @@ from atmosci.seasonal.methods.grid import GridFileReaderMethods
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class StaticGridFileBuilder(GridFileBuildMethods, Hdf5GridFileManager):
+class StaticGridFileMethods:
+    
+    def gribSourceIndexes(self, grib_source='ndfd'):
+        source_shape = self.datasetShape('%s.x_indexes' % grib_source)
+        source_indexes = [self.getData('%s.y_indexes' % grib_source).flatten(),
+                          self.getData('%s.x_indexes' % grib_source).flatten()]
+        return source_shape, source_indexes
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class StaticGridFileBuilder(StaticGridFileMethods, GridFileBuildMethods,
+                            Hdf5GridFileManager):
 
     def __init__(self, filepath, registry, project_config, filetype, source,
                        region, **kwargs):
@@ -31,8 +43,8 @@ class StaticGridFileBuilder(GridFileBuildMethods, Hdf5GridFileManager):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class StaticGridFileManager(GridFileManagerMethods, GridFileReaderMethods,
-                            Hdf5GridFileManager):
+class StaticGridFileManager(StaticGridFileMethods, GridFileManagerMethods,
+                            GridFileReaderMethods, Hdf5GridFileManager):
 
     def __init__(self, filepath, registry, mode='r'):
         Hdf5GridFileManager.__init__(self, filepath, mode)
@@ -47,7 +59,8 @@ class StaticGridFileManager(GridFileManagerMethods, GridFileReaderMethods,
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class StaticGridFileReader(GridFileReaderMethods, Hdf5GridFileReader):
+class StaticGridFileReader(StaticGridFileMethods, GridFileReaderMethods,
+                           Hdf5GridFileReader):
 
     def __init__(self, filepath, registry):
         Hdf5GridFileReader.__init__(self, filepath)

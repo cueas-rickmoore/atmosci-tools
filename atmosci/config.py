@@ -1,5 +1,5 @@
 
-import sys
+import os, sys
 
 from atmosci.utils.config import ConfigObject
 
@@ -11,20 +11,23 @@ ATMOSCFG = ConfigObject('atmosci', None)
 # directory paths
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 if 'win32' in sys.platform:
-    ATMOSCFG.dirpaths = { 'data':'C:\\Work\\app_data',
-                          'shared':'C:\\Work\\app_data\\shared',
-                          'static':'C:\\Work\\app_data\\static',
-                          'working':'C:\\Work' }
+    default = { 'data':'C:\\Work\\app_data',
+                'shared':'C:\\Work\\app_data\\shared',
+                'static':'C:\\Work\\app_data\\static',
+                'working':'C:\\Work' }
 else:
-    ATMOSCFG.dirpaths = { 'data':'/Volumes/data/app_data',
-                          'shared':'/Volumes/data/app_data/shared',
-                          'static':'/Volumes/data/app_data/static',
-                          'working':'/Volumes/data' }
+    default = { 'data':'/Volumes/data/app_data',
+                'shared':'/Volumes/data/app_data/shared',
+                'static':'/Volumes/data/app_data/static',
+                'working':'/Volumes/data' }
+
 # set the following parameter to the location of temporary forecast files
-ATMOSCFG.dirpaths.forecast = os.sep.join(ATMOSCFG.dirpaths.shared, 'forecast')
+default['forecast'] = os.path.join(default['shared'], 'forecast')
 # set the following parameter to the location of temporary reanalysis files
-ATMOSCFG.dirpaths.reanalysis = \
-        os.sep.join(ATMOSCFG.dirpaths.shared, 'reanalysis')
+#default['reanalysis'] = os.path.join(default['shared'], 'reanalysis')
+
+# SET THE CONFIGURED dirpath TO THE default DIRECTORY PATHS
+ATMOSCFG.dirpaths = default
 # only set the following configuration parameter when multiple apps are
 # using the same data source file - set it in each application's config
 # file - NEVER set it in the default (global) config file.
@@ -32,15 +35,25 @@ ATMOSCFG.dirpaths.reanalysis = \
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-CONFIG.modes = { 
-'dev': {
-    'dirpaths': {
-        'forecast': '/Volumes/Transport/data/app_data/shared/forecast',
-        'reanalysis': '/Volumes/Transport/data/app_data/shared/reanalysis',
-        'shared':  '/Volumes/Transport/data/app_data/shared',
-        'static':  '/Volumes/Transport/data/app_data/static',
-        'working': '/Volumes/Transport/data/app_data'
-        },
+# MODES ALLOW FOR DIFFERENT DIRECTORY PATHS FOR DIFFERENT PURPOSES
+ATMOSCFG.modes = { 
+    'default':{'dirpaths':default,},
+    'dev':{'dirpaths':{
+           'data':'/Volumes/Transport/data/app_data',
+           'forecast':'/Volumes/Transport/data/app_data/shared/forecast',
+           'shared':'/Volumes/Transport/data/app_data/shared',
+           'static':'/Volumes/Transport/data/app_data/static',
+           'working':'/Volumes/Transport/data'
+          },
+    },
+    'prod':{'dirpaths':default,},
+    'test': {'dirpaths':{
+             'data':'/Volumes/Transport/data/test_data',
+             'forecast':'/Volumes/Transport/data/test_data/shared/forecast',
+             'shared':'/Volumes/Transport/data/test_data/shared',
+             'static':'/Volumes/Transport/data/test_data/static',
+             'working':'/Volumes/Transport/data'
+            },
     },
 }
 

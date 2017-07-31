@@ -208,6 +208,30 @@ class ConfigObject(object):
         if seed is None: return tuple(hierarchy)
         else: return hierarchy
 
+    def inheritAttrs(self, obj):
+        my_attrs = self.__dict__['__ATTRIBUTES__'].keys()
+        if isinstance(obj, ConfigObject):
+            for key, value in obj.__dict__['__ATTRIBUTES__'].items():
+                if key not in my_attrs:
+                    self._set_value_of_([key,], value)
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                if key not in my_attrs:
+                    self._set_value_of_([key,], value)
+        else:
+            raise TypeError, "Invalid type for 'obj' argument : %s" % type(obj)
+
+    def link(self, config_obj, path=None):
+        if path is None:
+            self.__dict__['__CHILDREN__'][config_obj.name] = config_obj
+        else:
+            link_to = self._get_value_of_(self._path_to_list_(path), None)
+            if link_to is None:
+                errmsg = 'Invalid path "%s", onject not in this config.'
+                raise LookupError, errmsg % path
+            else:
+                link_to.__dict__['__CHILDREN__'][config_obj.name] = config.obj
+
     def newChild(self, path, obj=None):
         if '.' not in path:
             if path not in self.__dict__['__CHILDREN__']:

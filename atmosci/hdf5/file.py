@@ -28,8 +28,8 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         self.__hdf5_filepath = None
         self.__hdf5_filemode = None
 
-        self._dataset_names = None
-        self._group_names = None
+        self._dataset_names = [ ]
+        self._group_names = [ ]
         self._packers = { }
         self._unpackers = { }
 
@@ -44,7 +44,7 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
 
     @property
     def dataset_names(self):
-        if self._dataset_names is None:
+        if len(self._dataset_names) == 0:
             self.assertFileOpen('Attempt to list dataset names failed.')
             self._dataset_names = self.listDatasetsIn('__file__')
         return self._dataset_names
@@ -167,7 +167,7 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
     hasDataset = datasetExists
 
     def datasetExistsIn(self, dataset_path, parent_name):
-        if parent_name == '__file__':
+        if parent_name in ('__file__', None):
             return dataset_path in self._dataset_names
         else:
             self.assertFileOpen()
@@ -285,7 +285,7 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
     getGroupAttributes = groupAttributes
 
     def groupExists(self, group_name, parent_name=None):
-        if parent_name in('__file__', None):
+        if parent_name in ('__file__', None):
             return group_name in self._group_names
         else: return group_name in self.listGroupsIn(parent_name)
     hasGroup = groupExists

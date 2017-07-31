@@ -29,31 +29,38 @@ class SeasonalConfig(ConfigObject):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 CFGBASE = SeasonalConfig('seasonal_config', None)
+COMMON = SeasonalConfig('seasonal_config', None)
+
 from atmosci.config import ATMOSCFG
 # import any default directory paths
-ATMOSCFG.dirpaths.copy('dirpaths', CFGBASE)
+ATMOSCFG.dirpaths.copy('dirpaths', COMMON)
+CFGBASE.link(COMMON.dirpaths)
 # inport regional coordinate bounding boxes
-ATMOSCFG.regions.copy('regions', CFGBASE)
+ATMOSCFG.regions.copy('regions', COMMON)
+CFGBASE.link(COMMON.regions)
 # import mode-dependent defaults
-ATMOSCFG.modes.copy('modes', CFGBASE)
+ATMOSCFG.modes.copy('modes', COMMON)
+CFGBASE.link(COMMON.modes)
 del ATMOSCFG
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # default project configuration
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-ConfigObject('project', CFGBASE)
-CFGBASE.project.bbox = { 'NE':CFGBASE.regions.NE.data,
-                         'conus':CFGBASE.regions.conus.data }
-CFGBASE.project.compression = 'gzip'
+ConfigObject('project', COMMON)
+COMMON.project.bbox = { 'NE':COMMON.regions.NE.data,
+                        'conus':COMMON.regions.conus.data }
+COMMON.project.compression = 'gzip'
+COMMON.project.forecast = 'ndfd'
+COMMON.project.region = 'conus'
+COMMON.project.source = 'acis'
+COMMON.project.shared_forecast = True
+COMMON.project.shared_source = True
+COMMON.project.subproject_by_region = True
+
+COMMON.project.copy('project', CFGBASE)
 CFGBASE.project.end_day = (12,31)
-CFGBASE.project.forecast = 'ndfd'
-CFGBASE.project.region = 'conus'
 CFGBASE.project.root = 'shared'
-CFGBASE.project.source = 'acis'
-CFGBASE.project.shared_forecast = True
-CFGBASE.project.shared_source = True
 CFGBASE.project.start_day = (1,1)
-CFGBASE.project.subproject_by_region = True
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # dataset parameter definitions
@@ -76,12 +83,14 @@ CFGBASE.project.subproject_by_region = True
 #             date = one calendar day per entry
 #             doy = one day of an ideal year (0-365 or 0-366)
 #                   used to map historical summary data to specific dates
+#             time = one or more hours, minutes, seconds per entry
 #             year = one calendar year per entry
 #
 #    scope = time covered by entire dataset
 #            year = a single year
-#            season = dataset spansparts of two or more years
+#            season = dataset spans parts of two or more years
 #            por = dataset spans multiple years
+#            hours = fixed number of hours
 #
 #    view = layout of the dataset
 #           lat = latitude dimension
@@ -90,8 +99,15 @@ CFGBASE.project.subproject_by_region = True
 #               date = dimension is span of dates 
 #               doy = dimension is span of normalized days
 #               year = dimension is years 
-#               time = time in days, hour, minutes, seconds
-#        example : 'view':('day','lat','lon')
+#               or time dimension in days, hours, minutes or seconds
+#        example : 'view':('days','lat','lon')
+#
+#    interval = number of time units between items in the time dimension
+#               Not required, 1 is assumed if not set.
+#               e.g. period=hours, interval=3 : consecutive array elements
+#                    are 3 hours apart, so consecutive array elements
+#                    might exist for 2015-05-01:00, 2015-05-01:03,
+#                    2015-05-01:06, etc.
 #
 #    time span parameters :
 #        for date dimension :
@@ -100,97 +116,123 @@ CFGBASE.project.subproject_by_region = True
 #        for doy dimension :
 #            start_doy = first doy in dataset ... as int tuple (MM,DD)
 #            end_doy = last doy in dataset ... as int tuple (MM,DD)
-#        for year dimension :  
+#        for year dimension :
 #            start_year = first year in dataset ... as int
 #            end_year = last year in dataset ... as int
+#        for time dimension :
+#            start_time = first time in dataset ... as string
+#            end_time = last time in dataset ... as string
+#            e.g. for "hours" use 'YYYY-MM-DD:HH'
+#                 for "minutes" use 'YYYY-MM-DD:HH:MM'
 #
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # dataset view mappings
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-CFGBASE.view_map = { ('date','lat','lon'):'tyx', ('lat','lon','date'):'yxt',
-                     ('date','lon','lat'):'txy', ('lon','lat','date'):'xyt',
-                     ('doy','lat','lon'):'tyx', ('doy','lon','time'):'yxt',
-                     ('doy','lon','lat'):'txy', ('doy','lat','time'):'xyt',
-                     ('time','lat','lon'):'tyx', ('lat','lon','time'):'yxt',
-                     ('time','lon','lat'):'txy', ('lon','lat','time'):'xyt',
-                     ('lat','lon'):'yx', ('lon','lat'):'xy',
-                     ('lat','time'):'yt', ('time',):'t',
-                   }
+COMMON.view_map = { ('time','lat','lon'):'tyx', ('lat','lon','time'):'yxt',
+                    ('time','lon','lat'):'txy', ('lon','lat','time'):'xyt',
+                    ('lat','lon'):'yx', ('lon','lat'):'xy',
+                    ('time','lat',):'ty', ('lat','time'):'yt',
+                    ('time','lon',):'tx', ('lon','time'):'xt',
+                    ('time',):'t',
+                  }
+COMMON.view_map.copy('view_map', CFGBASE)
+CFGBASE.view_map.update( {
+     ('date','lat','lon'):'tyx', ('lat','lon','date'):'yxt',
+     ('date','lon','lat'):'txy', ('lon','lat','date'):'xyt',
+     ('doy','lat','lon'):'yxt', ('lat','lon','doy'):'yxt',
+     ('doy','lon','lat'):'txy', ('lon','lat','doy'):'xyt',
+} )
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # dataset configuration
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('datasets', CFGBASE)
+ConfigObject('datasets', COMMON)
+
+# generic 2D datasets
+COMMON.datasets.float2d = { 'dtype':float, 'dtype_packed':float,
+                            'missing_packed':N.nan, 'missing_data':N.nan,
+                            'view':('lat','lon') }
+CFGBASE.datasets.link(COMMON.datasets.float2d)
+
+COMMON.datasets.float2dPacked = { 'dtype':float, 'dtype_packed':'<i2',
+                                  'missing_data':N.nan,
+                                  'missing_packed':-32768,
+                                  'view':('lat','lon') }
+CFGBASE.datasets.link(COMMON.datasets.float2dPacked)
 
 # generic time series datasets
-CFGBASE.datasets.dateaccum = { 'dtype':float, 'dtype_packed':'<i2',
-                              'missing_packed':-32768, 'missing_data':N.nan,
-                              'scope':'season', 'period':'date',
-                              'view':('time','lat','lon'),
-                              'start_day':(1,1), 'end_day':(12,31),
-                              'provenance':'dateaccum' }
+COMMON.datasets.float3dPacked = { 'dtype':float, 'dtype_packed':'<i2',
+                                  'missing_data':N.nan,
+                                  'missing_packed':-32768,
+                                  'scope':'season',
+                                  'view':('time','lat','lon'),
+                                  'start_day':(1,1), 'end_day':(12,31) }
+CFGBASE.datasets.link(COMMON.datasets.float3dPacked)
+ 
+CFGBASE.datasets.dateaccum = { 'base':'float3dPacked',
+                               'description':'Accumlation',
+                               'period':'date',
+                               'provenance':'dateaccum' }
 
-CFGBASE.datasets.doyaccum = { 'dtype':float, 'dtype_packed':'<i2',
-                             'missing_packed':-32768, 'missing_data':N.nan,
-                             'scope':'season', 'period':'doy',
-                             'view':('time','lat','lon'),
-                             'start_day':(1,1), 'end_day':(12,31),
-                             'provenance':'doyaccum' }
+CFGBASE.datasets.doyaccum = { 'base':'float3dPacked',
+                              'description':'Accumlation',
+                              'period':'doy',
+                              'provenance':'doyaccum' }
 
-CFGBASE.datasets.dategrid = { 'dtype':float, 'dtype_packed':'<i2',
-                              'missing_packed':-32768, 'missing_data':N.nan,
-                              'scope':'season', 'period':'date',
-                              'view':('time','lat','lon'),
-                              'start_day':(1,1), 'end_day':(12,31),
+CFGBASE.datasets.dategrid = { 'base':'float3dPacked',
+                              'description':'Raw Data',
+                              'period':'date',
                               'provenance':'datestats', 
                               'chunk_type':('date','gzip') }
 
-CFGBASE.datasets.doygrid = { 'dtype':float, 'dtype_packed':'<i2',
-                             'missing_packed':-32768, 'missing_data':N.nan,
-                             'scope':'season', 'period':'doy',
-                             'view':('time','lat','lon'),
-                             'start_day':(1,1), 'end_day':(12,31),
+CFGBASE.datasets.doygrid = { 'base':'float3dPacked',
+                             'description':'Raw Data',
+                             'period':'doy',
                              'provenance':'doystats',
                              'chunk_type':('doy','gzip') }
 
 # temperature datasets
-CFGBASE.datasets.dategrid.copy('maxt', CFGBASE.datasets)
-CFGBASE.datasets.maxt.description = 'Daily maximum temperature' 
-CFGBASE.datasets.maxt.scope = 'year'
-CFGBASE.datasets.maxt.units = 'F'
+CFGBASE.datasets.maxt = { 'base':'dategrid',
+                          'description':'Daily maximum temperature',
+                          'scope':'year', 'units':'F' }
 
-CFGBASE.datasets.dategrid.copy('mint', CFGBASE.datasets)
-CFGBASE.datasets.mint.description = 'Daily minimum temperature' 
-CFGBASE.datasets.maxt.scope = 'year'
-CFGBASE.datasets.mint.units = 'F'
+CFGBASE.datasets.maxt = { 'base':'dategrid',
+                          'description':'Daily minimum temperature',
+                          'scope':'year', 'units':'F' }
 
 # location datasets
-CFGBASE.datasets.elev = { 'dtype':float, 'dtype_packed':'<i2', 'units':'meters',
-                         'missing_packed':-32768, 'missing_data':N.nan,
-                         'view':('lat','lon'),
-                         'description':'Elevation' }
-CFGBASE.datasets.lat = { 'dtype':float, 'dtype_packed':float, 'units':'degrees',
-                        'missing_packed':N.nan, 'missing_data':N.nan,
-                        'view':('lat','lon'),
-                        'description':'Latitude' }
-CFGBASE.datasets.lon = { 'dtype':float, 'dtype_packed':float, 'units':'degrees',
-                        'missing_packed':N.nan, 'missing_data':N.nan,
-                        'view':('lat','lon'),
-                        'description':'Longitude' }
+COMMON.datasets.elev = { 'base':'float2dPacked', 'description':'Elevation',
+                          'units':'meters' }
+CFGBASE.datasets.link(COMMON.datasets.elev)
+
+COMMON.datasets.lat = { 'base':'float2d', 'description':'Latitude',
+                         'units':'degrees' }
+CFGBASE.datasets.link(COMMON.datasets.lat)
+
+COMMON.datasets.lon = { 'base':'float2d', 'description':'Longitude',
+                         'units':'degrees' }
+CFGBASE.datasets.link(COMMON.datasets.lon)
 
 # mask datasets
-CFGBASE.datasets.land_mask = { 'dtype':bool, 'dtype_packed':bool,
-                              'view':('lat','lon'),
-                              'description':'Land Mask (Land=True, Water=False)'
-                             }
-CFGBASE.datasets.interp_mask = { 'dtype':bool, 'dtype_packed':bool,
-                                'view':('lat','lon'),
-                                'description':'Interpolation Mask (Use=True)' }
+COMMON.datasets.land_mask = { 'dtype':bool, 'dtype_packed':bool,
+                 'view':('lat','lon'),
+                 'description':'Land Mask (Land=True, Water=False)' }
+CFGBASE.datasets.link(COMMON.datasets.land_mask)
+
+COMMON.datasets.interp_mask = { 'dtype':bool, 'dtype_packed':bool,
+                 'view':('lat','lon'),
+                 'description':'Interpolation Mask (Use=True)' }
+CFGBASE.datasets.link(COMMON.datasets.interp_mask)
+
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # filename templates
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ConfigObject('filenames', COMMON)
+COMMON.filenames.static = '%(type)s_%(region)s_static.h5'
+
 ConfigObject('filenames', CFGBASE)
 CFGBASE.filenames.project = '%(year)d-%(project)s-%(source)s-%(region)s.h5'
 CFGBASE.filenames.source = '%(year)d-%(source)s-%(region)s-Daily.h5'
@@ -203,6 +245,7 @@ CFGBASE.filenames.variety = '%(year)d-%(project)-%(source)s-%(variety)s.h5'
 # filetypes
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('filetypes', CFGBASE)
+ConfigObject('filetypes', COMMON)
 
 CFGBASE.filetypes.source = { 'scope':'year',
                   'groups':('tempexts',), 'datasets':('lon','lat'), 
@@ -213,6 +256,7 @@ CFGBASE.filetypes.source = { 'scope':'year',
 # data group configuration
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('groups', CFGBASE)
+ConfigObject('groups', COMMON)
 
 # groups of observed data
 CFGBASE.groups.tempexts = { 'path':'temps', 'description':'Daily temperatures',
@@ -227,6 +271,8 @@ CFGBASE.groups.mint = { 'description':'Minimum daily temperature',
 # provenance dataset configuration
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 PROVENANCE = ConfigObject('provenance', CFGBASE, 'generators', 'types', 'views')
+ConfigObject('provenance', COMMON)
+
 
 # provenance time series views
 CFGBASE.provenance.views.date = ('date','obs_date')
@@ -286,8 +332,9 @@ CFGBASE.provenance.types.tempexts = \
 # data sources
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('sources', CFGBASE)
+ConfigObject('sources', COMMON)
 
-CFGBASE.sources.acis = { 'acis_grid':3, 'days_behind':0,
+COMMON.sources.acis = { 'acis_grid':3, 'days_behind':0,
                 'earliest_available_time':(10,30,0),
                 'subdir':'acis_hires', 'tag':'ACIS-HiRes',
                 'description':'ACIS HiRes grid 3',
@@ -296,8 +343,9 @@ CFGBASE.sources.acis = { 'acis_grid':3, 'days_behind':0,
                 'grid_dimensions':ACIS_GRID_DIMENSIONS,
                 'node_spacing':ACIS_NODE_SPACING,
                 'search_radius':ACIS_SEARCH_RADIUS }
+CFGBASE.sources.link(COMMON.sources.acis)
 
-CFGBASE.sources.ndfd = { 'days_behind':0, 'tag':'NDFD',
+COMMON.sources.ndfd = { 'days_behind':0, 'tag':'NDFD',
                 'description':'National Digital Forecast Database',
                 'grid_dimensions':{'conus':{'lat':1377,'lon':2145},
                                    'NE':{'lat':598,'lon':635}},
@@ -313,8 +361,9 @@ CFGBASE.sources.ndfd = { 'days_behind':0, 'tag':'NDFD',
                 'lon_spacing':(0.0238,0.0330),
                 'search_radius':0.0413,
                 }
+CFGBASE.sources.link(COMMON.sources.ndfd)
 
-CFGBASE.sources.prism = { 'acis_grid':21, 'days_behind':1,
+COMMON.sources.prism = { 'acis_grid':21, 'days_behind':1,
                 'earliest_available_time':(10,30,0), 'tag':'PRISM',
                 'description':'PRISM Climate Data (ACIS grid 21)',
                 'bbox':{'NE':'-82.75,37.125,-66.7916,47.708',
@@ -322,36 +371,29 @@ CFGBASE.sources.prism = { 'acis_grid':21, 'days_behind':1,
                 'grid_dimensions':PRISM_GRID_DIMENSIONS,
                 'node_spacing':ACIS_NODE_SPACING,
                 'search_radius':ACIS_SEARCH_RADIUS }
-
-CFGBASE.sources.ndfd.copy('rtma', CFGBASE.sources)
-CFGBASE.sources.rtma.tag = 'RTMA'
-CFGBASE.sources.rtma.description = 'Real-Time Mesoscale Analysis'
-del CFGBASE.sources.rtma['cache_server']
-del CFGBASE.sources.rtma['download_template']
-
-CFGBASE.sources.rtma.copy('urma', CFGBASE.sources)
-CFGBASE.sources.urma.tag = 'URMA'
-CFGBASE.sources.urma.description = 'Unrestricted Mesoscale Analysis'
-
+CFGBASE.sources.link(COMMON.sources.prism)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # static grid file configuration
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('static', CFGBASE)
+ConfigObject('static', COMMON)
 
-CFGBASE.static.acis = { 'type':'acis5k', 'tag':'ACIS',
+COMMON.static.acis = { 'type':'acis5k', 'tag':'ACIS',
               'description':'Static datasets for ACIS HiRes',
               'datasets':('lat', 'lon', 'elev'),
               'masks':('land_mask:cus_mask', 'interp_mask:cus_interp_mask'),
               'masksource':'dem5k_conus_static.h5', 'filetype':'static',
               'template':'acis5k_%(region)s_static.h5',
               }
+CFGBASE.static.link(COMMON.static.acis)
 
-CFGBASE.static.prism = { 'type':'prism5k', 'tag':'PRISM',
+COMMON.static.prism = { 'type':'prism5k', 'tag':'PRISM',
               'description':'Static datasets for PRISM model',
               'datasets':('lat', 'lon', 'elev'),
               'masks':('land_mask:cus_mask', 'interp_mask:cus_interp_mask'),
               'masksource':'dem5k_conus_static.h5', 'filetype':'static',
               'template':'prism5k_%(region)s_static.h5'
               }
+CFGBASE.static.link(COMMON.static.prism)
 

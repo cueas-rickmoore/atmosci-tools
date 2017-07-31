@@ -107,11 +107,15 @@ class StaticFileAccessorMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def staticWorkingDir(self):
+    def staticWorkingDir(self, **kwargs):
         static_dir = self.config.get('dirpaths.static', default=None)
         if static_dir is None:
-            working_dir =  self.projectRootDir()
+            working_dir = self.projectRootDir()
             static_dir = os.path.join(working_dir, 'static')
-        if not os.path.exists(static_dir): os.makedirs(static_dir)
+        if not os.path.exists(static_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Static file directory does not exist :\n%s'
+                raise IOError, errmsg % static_dir
+            else: os.makedirs(static_dir)
         return static_dir
 

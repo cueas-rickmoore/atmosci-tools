@@ -340,7 +340,6 @@ class Hdf5GridFileMixin:
         or self.node_search_radius is None:
             self._setDefaultSearchRadius_()
 
-
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _setDefaultSearchRadius_(self):
@@ -448,7 +447,7 @@ class Hdf5GridFileManager(Hdf5FileManager, Hdf5GridFileMixin):
             if max_x == min_x:
                 dataset[min_y:, min_x] = data
             elif max_x < dataset.shape[1]:
-                dataset[start, min_y:, min_x:max_x] = data
+                dataset[min_y:, min_x:max_x] = data
             else: # max_x >= dataset.shape[1]
                 dataset[min_y:, min_x:] = data
 
@@ -461,24 +460,9 @@ class Hdf5GridFileManager(Hdf5FileManager, Hdf5GridFileMixin):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class Hdf5GridFileBuilder(Hdf5GridFileManager):
-    """ Creates a new HDF5 file with read/write access to datasets, groups,
-    and other objects. 
-
-    Inherits all of the capabilities of Hdf5GridFileManager
+class Hdf5GridFileBuilderMixin:
+    """ provides additional methods used for building grid files.
     """
-
-    def __init__(self, hdf5_filepath, lons, lats, mode='w'):
-        self._access_authority = ('r','a', 'w')
-        Hdf5GridFileManager.__init__(self, hdf5_filepath, mode)
-        self.setFileAttribute('created', self.timestamp)
-
-        # create and initialize coordinate datasets
-        if lons is not None and lats is not None:
-            self.initLonLatData(lons, lats)
-        
-        # reopen the file in append mode
-        self.open(mode='a')
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -512,4 +496,26 @@ class Hdf5GridFileBuilder(Hdf5GridFileManager):
             self.setDatasetAttributes('lat', min=min_lat, max=max_lat, **kwargs)
         # close the file to make sure everything are saved
         self.close()
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class Hdf5GridFileBuilder(Hdf5GridFileManager, Hdf5GridFileBuilderMixin):
+    """ Creates a new HDF5 file with read/write access to datasets, groups,
+    and other objects. 
+
+    Inherits all of the capabilities of Hdf5GridFileManager
+    """
+
+    def __init__(self, hdf5_filepath, lons, lats, mode='w'):
+        self._access_authority = ('r','a', 'w')
+        Hdf5GridFileManager.__init__(self, hdf5_filepath, mode)
+        self.setFileAttribute('created', self.timestamp)
+
+        # create and initialize coordinate datasets
+        if lons is not None and lats is not None:
+            self.initLonLatData(lons, lats)
+        
+        # reopen the file in append mode
+        self.open(mode='a')
 

@@ -14,7 +14,7 @@ import pygrib
 from atmosci.utils.timeutils import asDatetimeDate, elapsedTime
 from atmosci.utils.units import convertUnits
 
-from atmosci.seasonal.factory import NDFDProjectFactory
+from atmosci.tempexts.factory import TempextsForecastFactory
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -46,7 +46,7 @@ if len(args) ==2:
 else:
     target_date = datetime.date(int(args[2]), int(args[3]), int(args[4]))
 
-factory = NDFDProjectFactory()
+factory = TempextsForecastFactory()
 ndfd = factory.sourceConfig('ndfd')
 region = factory.regionConfig(region_key)
 source = factory.sourceConfig(source_key)
@@ -60,9 +60,8 @@ ndfd_indexes = [ reader.getData('ndfd.y_indexes').flatten(),
 reader.close()
 del reader
 
-reader = factory.sourceFileReader(source, target_date.year, region, 'temps')
-last_obs_date = \
-    asDatetimeDate(reader.datasetAttribute('temps.mint', 'last_obs_date'))
+reader = factory.tempextsFileReader(target_date.year, source, region)
+last_obs_date = reader.dateAttribute('temps.mint', 'last_obs_date')
 print '    last obs date', last_obs_date
 del reader
 
@@ -123,8 +122,9 @@ for temp_var in ('maxt','mint'):
 
 target_year = fcast_date.year
 manager = \
-factory.sourceFileManager(source, target_year, region, 'temps', mode='a')
+factory.tempextsFileManager(target_year, source, region, mode='r')
 print '\nsaving forecast to', manager.filepath
+manager.close()
 
 max_temps = temps['maxt']
 min_temps = temps['mint']
@@ -139,7 +139,6 @@ for indx, data in enumerate(min_temps):
 
 # turn annoying numpy warnings back on
 warnings.resetwarnings()
-
 
 # update forecast time span
 first_date = min_temps[0][0]

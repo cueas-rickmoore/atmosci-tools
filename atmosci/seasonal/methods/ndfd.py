@@ -1,6 +1,6 @@
 
 import os
-import datetime
+import datetime, time
 import urllib
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -25,12 +25,25 @@ class NDFDFactoryMethods:
         self.setServerUrl(server_url)
         self.file_template = NDFD_FILE_TEMPLATE
         self.ndfd_config = self.sourceConfig('ndfd')
+        self.wait_attempts = 5
+        self.wait_seconds = 10.
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def setServerUrl(self, server_url):
         self.server_url = server_url
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setDownloadAttempts(self, attempts):
+        if isinstance(attempts, int): self.wait_attempts = attempts
+        else: self.wait_attempts = int(attempts)
+    
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        
+    def setDownloadWaitTime(self, seconds):
+        if isinstance(seconds, float): self.wait_seconds = seconds
+        else: self.wait_seconds = float(seconds)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -47,6 +60,7 @@ class NDFDFactoryMethods:
                                      region='conus', verbose=False):
         target_date = self.timeOfLatestForecast()
         filepaths = [ ]
+        failed = [ ]
         for filetype in filetypes:
             for period in periods:
                 remote_uri = \
@@ -61,10 +75,24 @@ class NDFDFactoryMethods:
                 url = self.server_url + remote_uri
                 if verbose:
                     print 'url :', url
-                urllib.urlretrieve(url, local_filepath)
-                filepaths.append(local_filepath)
 
-        return target_date, tuple(filepaths)
+                attempt = 0
+                while True:
+                    try:
+                        urllib.urlretrieve(url, local_filepath)
+                    except Exception as e:
+                        if attempt < self.wait_attempts:
+                            attempt += 1
+                            time.sleep(self.wait_seconds)
+                            continue
+                        else:
+                            failed.append(local_filepth)
+                            break
+                    else: 
+                        filepaths.append(local_filepath)
+                        break
+
+        return target_date, tuple(filepaths), tuple(failed)
 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

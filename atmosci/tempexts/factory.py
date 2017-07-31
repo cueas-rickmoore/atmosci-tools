@@ -3,8 +3,10 @@ import os
 
 from atmosci.acis.griddata import AcisGridDownloadMixin
 
+from atmosci.seasonal.methods.ndfd import NDFDFactoryMethods
+
 from atmosci.seasonal.factory import SeasonalSourceFileFactory,\
-                                     NDFDProjectFactory
+                                     SeasonalProjectFactory
 
 from atmosci.tempexts.grid import TemperatureFileReader, \
                                   TemperatureFileManager, \
@@ -122,15 +124,18 @@ class TempextsProjectFactory(TempextsFactoryMethods, AcisGridDownloadMixin,
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class TempextsForecastFactory(TempextsFactoryMethods, NDFDProjectFactory):
+class TempextsForecastFactory(TempextsFactoryMethods, NDFDFactoryMethods,
+                              SeasonalProjectFactory):
 
-    def __init__(self, config=CONFIG, registry=REGISTRY):
-        SeasonalSourceFileFactory.__init__(self, config, registry)
+    def __init__(self, config=CONFIG, registry=REGISTRY, alt_server_url=None):
+        SeasonalProjectFactory.__init__(self, config, registry)
+        if alt_server_url is None: self.initNDFD()
+        else: self.initNDFD(alt_server_url)
+
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _registerAccessClasses(self):
+        SeasonalProjectFactory._registerAccessClasses(self)
         self._registerTempsFileAccessClasses()
-        # some older code uses 'source' for temperature files
-        self.AccessClasses.tempexts.copy('source', self.AccessClasses)
 

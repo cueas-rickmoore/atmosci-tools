@@ -66,7 +66,7 @@ print 'building file :', filepath
 if verbose: print 'file time span :', start_date, end_date
 builder = temps_factory.tempextsFileBuilder(target_year, source, region,
                         start_date=start_date, end_date=end_date,
-                        debug=debug)
+                        bbox=region.data, debug=debug)
 builder.build(True, True)
 reader = static_factory.staticFileReader(source, region)
 builder.initLonLatData(reader.lons, reader.lats)

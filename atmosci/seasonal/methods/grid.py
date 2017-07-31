@@ -1,8 +1,9 @@
 
 import numpy as N
 
-from atmosci.utils.units import convertUnits
+#from atmosci.utils.units import convertUnits
 from atmosci.utils.string import isFloat, isInteger, tupleFromString
+from atmosci.units import convertUnits
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -203,8 +204,12 @@ class GridFileReaderMethods:
         self._loadDatasetAttrs_()
         self._postLoadFileAttrs_()
 
-    def _preInitProject_(self, registry, **kwargs):
-        self.registry = registry.copy()
+    def _preInitProject_(self, registry=None, **kwargs):
+        if registry is None:
+            from atmosci.utils.config import ConfigObject
+            self.registry = ConfigObject('registry', None)
+        else:
+            self.registry = registry.copy()
         self._dataset_names = [ ]
         self._datasets_ = { }
         self._unpackers = { }

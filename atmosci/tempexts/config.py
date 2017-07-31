@@ -1,4 +1,6 @@
 
+import os
+
 from atmosci.utils.timeutils import asAcisQueryDate
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -16,9 +18,9 @@ del CFGBASE
 # directory paths
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 CONFIG.dirpaths.project = \
-       os.sep.join(CONFIG.dirpaths.shared, 'grid')
+       os.path.join(CONFIG.dirpaths.shared, 'grid')
 CONFIG.modes.dev.dirpaths.project = \
-       os.sep.join(CONFIG.modes.dev.dirpaths.shared, 'grid')
+       os.path.join(CONFIG.modes.dev.dirpaths.shared, 'grid')
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # GDD project configuration

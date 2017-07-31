@@ -40,24 +40,33 @@ class PathConstructionMethods:
     # common project directory path generators
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def projectRootDir(self):
+    def projectRootDir(self, **kwargs):
         root_dir = self.config.dirpaths.get('project', None)
         if root_dir is None:
-            root = self.project.get('root', None)
+            if self.project is None: root = None
+            else: root = self.project.get('root', None)
             if root is None: return self.workingDir()
             root_dir = os.path.join(self.workingDir(),
                                     self.normalizeDirpath(root))
-        if not os.path.exists(root_dir): os.makedirs(root_dir)
+        if not os.path.exists(root_dir): 
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Project root directory does not exist :\n%s'
+                raise IOError, errmsg % root_dir
+            else: os.makedirs(root_dir)
         return root_dir
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def projectGridDir(self, source, region=None):
+    def projectGridDir(self, source, region=None, **kwargs):
         project_dir = self.projectRootDir()
         if self.project.subproject_by_region:
             project_dir =  self.subdirByRegion(project_dir, region)
         project_dir = os.path.join(project_dir, self.sourceToDirpath(source))
-        if not os.path.exists(project_dir): os.makedirs(project_dir)
+        if not os.path.exists(project_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Project grid directory does not exist :\n%s'
+                raise IOError, errmsg % project_dir
+            else: os.makedirs(project_dir)
         return project_dir
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -77,13 +86,44 @@ class PathConstructionMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def sharedRootDir(self, data_format=None):
+    def appDataRootDir(self, **kwargs):
+        appdata_dir = self.config.dirpaths.get('appdata', None)
+        if data_dir is None:
+            data_dir = self.dataRootDir(**kwargs)
+            appdata_dir = os.path.join(data_dir, 'app_data')
+        if not os.path.exists(appdata_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'App data directory does not exist :\n%s'
+                raise IOError, errmsg % appdata_dir
+            else: os.makedirs(appdata_dir)
+        return appdata_dir
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def dataRootDir(self, **kwargs):
+        data_dir = self.config.dirpaths.get('data', None)
+        if data_dir is None:
+            data_dir = os.path.join(self.workingDir(), 'data')
+        if not os.path.exists(data_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Data directory does not exist :\n%s'
+                raise IOError, errmsg % data_dir
+            else: os.makedirs(data_dir)
+        return data_dir
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def sharedRootDir(self, data_format=None, **kwargs):
         shared_dir = self.config.dirpaths.get('shared', None)
         if shared_dir is None:
             shared_dir = os.path.join(self.workingDir(), 'shared')
         if data_format is not None:
             shared_dir = os.path.join(shared_dir, data_format)
-        if not os.path.exists(shared_dir): os.makedirs(shared_dir)
+        if not os.path.exists(shared_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Shared root directory does not exist :\n%s'
+                raise IOError, errmsg % shared_dir
+            else: os.makedirs(shared_dir)
         return shared_dir
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -99,24 +139,31 @@ class PathConstructionMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def targetGridDir(self, target_year, source, region=None):
+    def targetGridDir(self, target_year, source, region=None, **kwargs):
         project_dir = self.projectGridDir(source, region)
         target_dir = os.path.join(project_dir, str(target_year))
-        if not os.path.exists(target_dir): os.makedirs(target_dir)
+        if not os.path.exists(target_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Target year directory does not exist :\n%s'
+                raise IOError, errmsg % target_dir
+            else: os.makedirs(target_dir)
         return target_dir
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def workingDir(self):
-        working_dir = self.config.get('dirpaths.working', None)
+    def workingDir(self, **kwargs):
+        working_dir = self.config.get('dirpaths.working',
+                                      self.config.get('working_dir', None))
         if working_dir is None:
-            working_dir = self.config.get('working_dir', None)
-        if working_dir is not None:
-            if not os.path.exists(working_dir): os.makedirs(working_dir)
-            return working_dir
-        else:
             err_msg = 'Configuration contains no working directory path.'
             raise LookupError, err_msg
+
+        if not os.path.exists(working_dir):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Working directory does not exist :\n%s'
+                raise IOError, errmsg % working_dir
+            else: os.makedirs(working_dir)
+        return working_dir
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # project directory & data file path

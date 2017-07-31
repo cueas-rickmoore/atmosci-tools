@@ -69,6 +69,7 @@ builder = TemperatureFileBuilder(dest_filepath, factory.registry,
                          factory.config, target_year, source, region,
                          start_date=start_date, end_date=end_date,
                          debug=debug)
+builder.open('a')
 builder.setFileAttributes(**reader.fileAttributes())
 builder.close()
 builder.open('a')
