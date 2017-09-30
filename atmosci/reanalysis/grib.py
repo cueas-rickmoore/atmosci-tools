@@ -113,10 +113,16 @@ class ReanalysisGribReader(object):
     def gribs(self): return self.__gribs
 
     @property
+    def grib_names(self): return self.__gribname_indexes.keys()
+
+    @property
     def grib_source(self): return self.__grib_source
 
     @property
     def filepath(self): return self.__grib_filepath
+
+    @property
+    def short_names(self): return self.__shortname_indexes.keys()
 
     @property
     def source_variables(self): return self.__source_variables
@@ -179,7 +185,8 @@ class ReanalysisGribReader(object):
     #                   # the missing value for the message
     #   keys() # like Python dict keys function
     #   latlons() # return lats/lons as NumPy array
-    #   str(grib) or repr(grib) i.e. __repr__() # prints inventory of grib
+    #   str(grib) or repr(grib)
+    #                i.e. repr(grib) # prints inventory of grib
     #   valid_key(key) # True only if the grib message has a specified key,
     #                  # it is not missing and it has a value that can be read
     #

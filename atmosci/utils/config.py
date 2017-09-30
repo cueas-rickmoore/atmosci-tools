@@ -221,16 +221,18 @@ class ConfigObject(object):
         else:
             raise TypeError, "Invalid type for 'obj' argument : %s" % type(obj)
 
-    def link(self, config_obj, path=None):
+    def link(self, config_obj, path=None, alias=None):
+        if alias is None: link_name = config_obj.name
+        else: link_name = alias
         if path is None:
-            self.__dict__['__CHILDREN__'][config_obj.name] = config_obj
+            self.__dict__['__CHILDREN__'][link_name] = config_obj
         else:
             link_to = self._get_value_of_(self._path_to_list_(path), None)
             if link_to is None:
                 errmsg = 'Invalid path "%s", onject not in this config.'
                 raise LookupError, errmsg % path
             else:
-                link_to.__dict__['__CHILDREN__'][config_obj.name] = config.obj
+                link_to.__dict__['__CHILDREN__'][link_name] = config.obj
 
     def newChild(self, path, obj=None):
         if '.' not in path:
@@ -575,10 +577,13 @@ class ConfigObject(object):
         else: return self.parent._top_()
 
     def _update_(self, obj):
-        for key, child_obj in obj.__dict__['__CHILDREN__'].items():
+        for key, child in obj.__dict__['__CHILDREN__'].items():
             if key in self.__dict__['__CHILDREN__']:
-                self.__dict__['__CHILDREN__'][key]._update_(child_obj)
-            else: self.__dict__['__CHILDREN__'][key] = obj.copy(key, self)
+                self.__dict__['__CHILDREN__'][key]._update_(child)
+            #elif isinstance(child, ConfigObject):
+            #    self.__dict__['__CHILDREN__'][key] = child.copy(key, self)
+            #else: self[key] = child
+            else: self.__dict__['__CHILDREN__'][key] = child.copy(key, self)
 
         for key, value in obj.__dict__['__ATTRIBUTES__'].items():
             if isinstance(value, tuple):

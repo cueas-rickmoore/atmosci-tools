@@ -12,8 +12,7 @@ del REANALYSIS_CONFIG
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # define URMA as the project
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-del CONFIG['project']
-CONFIG.project = {
+CONFIG.project.update( {
        # GRIB file bounding box (equivalent coverage to ACIS grid bounds)
        'bbox':{'conus':'-125.25,23.749,-65.791,50.208',
                'NE':'-83.125,36.75,-66.455,48.075'},
@@ -30,7 +29,7 @@ CONFIG.project = {
        'node_spacing':0.0248, 'resolution':'~2.5km',
        'search_radius':0.0413,
        'tag':'URMA',
-}
+} )
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # URMA DATA SOURCES 

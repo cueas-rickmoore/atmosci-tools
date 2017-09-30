@@ -148,7 +148,16 @@ def yearFromDate(date):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def lastDayOfMonth(year, month):
+def lastDayOfMonth(year_or_date, month=None):
+    if isinstance(year_or_date, (datetime.date, datetime.datetime)):
+        year = year_or_date.year
+        month = year_or_date.month
+    elif isinstance(year_or_date, int):
+        year = year_or_date
+    else:
+        errmsg = 'First argument must be int, datetime.date, or'
+        raise TypeError, errmsg + ' datetime.datetime.'
+
     if month in (1,3,5,7,8,10,12):
         return 31
     elif month in (4,6,9,11):

@@ -397,3 +397,6 @@ COMMON.static.prism = { 'type':'prism5k', 'tag':'PRISM',
               }
 CFGBASE.static.link(COMMON.static.prism)
 
+ConfigObject('subdir_paths', CFGBASE)
+ConfigObject('subdir_paths', COMMON)
+

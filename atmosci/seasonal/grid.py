@@ -9,14 +9,18 @@ from atmosci.seasonal.methods.timegrid import TimeGridFileReaderMethods,\
 
 from atmosci.seasonal.methods.grid import hdf5ReaderPatch
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+from atmosci.seasonal.registry import REGBASE
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class SeasonalGridFileReader(TimeGridFileReaderMethods,
                              Hdf5DateGridFileReader):
 
-    def __init__(self, filepath, registry):
-        self._preInitProject_(registry)
+    def __init__(self, filepath, registry=None):
+        if registry is None: self._preInitProject_(REGBASE)
+        else: self._preInitProject_(registry)
         Hdf5DateGridFileReader.__init__(self, filepath)
         hdf5ReaderPatch(self)
         self._postInitProject_()
@@ -33,8 +37,9 @@ class SeasonalGridFileReader(TimeGridFileReaderMethods,
 class SeasonalGridFileManager(TimeGridFileManagerMethods,
                               Hdf5DateGridFileManager):
 
-    def __init__(self, filepath, registry, mode='r'):
-        self._preInitProject_(registry)
+    def __init__(self, filepath, registry=None, mode='r'):
+        if registry is None: self._preInitProject_(REGBASE)
+        else: self._preInitProject_(registry)
         Hdf5DateGridFileManager.__init__(self, filepath, mode)
         hdf5ReaderPatch(self)
         self._postInitProject_()

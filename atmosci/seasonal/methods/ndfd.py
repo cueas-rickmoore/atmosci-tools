@@ -1,7 +1,9 @@
 
 import os
-import datetime, time
 import urllib
+
+import datetime, time
+from dateutil.relativedelta import relativedelta
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -24,9 +26,21 @@ class NDFDFactoryMethods:
     def initNDFD(self, server_url=NDFD_REMOTE_SERVER):
         self.setServerUrl(server_url)
         self.file_template = NDFD_FILE_TEMPLATE
-        self.ndfd_config = self.sourceConfig('ndfd')
+        self.ndfd_config = self.getSourceConfig('ndfd')
         self.wait_attempts = 5
         self.wait_seconds = 10.
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setDownloadAttempts(self, attempts):
+        if isinstance(attempts, int): self.wait_attempts = attempts
+        else: self.wait_attempts = int(attempts)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setDownloadWaitTime(self, seconds):
+        if isinstance(seconds, float): self.wait_seconds = seconds
+        else: self.wait_seconds = float(seconds)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -35,29 +49,17 @@ class NDFDFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def setDownloadAttempts(self, attempts):
-        if isinstance(attempts, int): self.wait_attempts = attempts
-        else: self.wait_attempts = int(attempts)
-    
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-        
-    def setDownloadWaitTime(self, seconds):
-        if isinstance(seconds, float): self.wait_seconds = seconds
-        else: self.wait_seconds = float(seconds)
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
     def timeOfLatestForecast(self):
         latest_time = datetime.datetime.utcnow()
         if latest_time.minute <= CACHE_SERVER_BUFFER_MIN:
-            latest_time = (latest_time - datetime.timedelta(hours=1))
+            latest_time = (latest_time - relativedelta(hours=1))
         return latest_time.replace(minute=0, second=0, microsecond=0)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def downloadLatestForecast(self, filetypes=('maxt','mint'),
                                      periods=('001-003','004-007'),
-                                     region='conus', verbose=False):
+                                     region='conus', debug=False):
         target_date = self.timeOfLatestForecast()
         filepaths = [ ]
         failed = [ ]
@@ -65,16 +67,15 @@ class NDFDFactoryMethods:
             for period in periods:
                 remote_uri = \
                     NDFD_FILE_TEMPLATE.format(region, period, filetype)
-                if verbose:
+                if debug:
                     print '\ndownloading :', remote_uri
                 local_filepath = self.forecastGribFilepath(self.ndfd_config,
                                       target_date, period, filetype)
-                if verbose:
+                if debug:
                     print 'to :', local_filepath
             
                 url = self.server_url + remote_uri
-                if verbose:
-                    print 'url :', url
+                if debug: print 'url :', url
 
                 attempt = 0
                 while True:
@@ -86,14 +87,13 @@ class NDFDFactoryMethods:
                             time.sleep(self.wait_seconds)
                             continue
                         else:
-                            failed.append(local_filepth)
+                            failed.append((filetype,period,remote_uri))
                             break
-                    else: 
+                    else:
                         filepaths.append(local_filepath)
                         break
 
         return target_date, tuple(filepaths), tuple(failed)
-
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # forecast directory & data file path

@@ -87,8 +87,8 @@ class PathConstructionMethods:
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def appDataRootDir(self, **kwargs):
-        appdata_dir = self.config.dirpaths.get('appdata', None)
-        if data_dir is None:
+        appdata_dir = self.config.dirpaths.get('app_data', None)
+        if appdata_dir is None:
             data_dir = self.dataRootDir(**kwargs)
             appdata_dir = os.path.join(data_dir, 'app_data')
         if not os.path.exists(appdata_dir):
@@ -136,6 +136,17 @@ class PathConstructionMethods:
         subdir = os.path.join(root_dir, region_dir)
         if not os.path.exists(subdir): os.makedirs(subdir)
         return subdir
+    
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def subdirPath(self, subdir_key):
+        subdir_path = self.config.subdir_paths.get(subdir_key, None)
+        if subdir_path is None:
+            errmsg = '"%s" not found in "self.config.subdir_paths"'
+            raise KeyError, errmsg % subdir_key
+
+        if isinstance(subdirs, tuple): return os.sep.join(subdir_path)
+        return subdir_path 
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

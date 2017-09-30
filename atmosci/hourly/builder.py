@@ -130,7 +130,7 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
         return self.__config.get('project',None)
 
     @property
-    def region(self):
+     region(self):
         return self.__region
 
     @property
@@ -247,7 +247,7 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
 
         self.start_time = start_time
         self.end_time = end_time
-        self.num_hours = tzutils.timeDifferenceInHours(start_time, end_time)
+        self.num_hours = tzutils.hoursInTimespan(start_time, end_time)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -347,15 +347,16 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
         start_time = tzutils.asHourInTimezone(start_time, timezone)
         attrs['start_time'] = tzutils.hourAsString(start_time)
 
-        reference_time = kwargs.get('reference_time', self.end_time)
-        reference_time = tzutils.asHourInTimezone(reference_time, timezone)
-        attrs['reference_time'] = tzutils.hourAsString(reference_time)
-
         end_time = kwargs.get('end_time', self.end_time)
         end_time = tzutils.asHourInTimezone(end_time, timezone)
         attrs['end_time'] = tzutils.hourAsString(end_time)
+        
+        reference_time = kwargs.get('reference_time', None)
+        if reference_time is not None: # and reference_time != start_time:
+            reference_time = tzutils.asHourInTimezone(reference_time, timezone)
+            attrs['reference_time'] = tzutils.hourAsString(reference_time)
 
-        num_hours = tzutils.timeDifferenceInHours(start_time, end_time)
+        num_hours = tzutils.hoursInTimespan(start_time, end_time)
         attrs['num_hours'] = num_hours
 
         return attrs

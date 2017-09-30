@@ -104,57 +104,24 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
             new fcast_start_time : forecast was partially overwritten
                                    by observations
         """
-
         fcast_end_time = \
             self.timeAttribute(dataset_path, 'fcast_end_time', None)
-        if fcast_end_time is None: 
-            # None indicates that no change was made
-            fcast_start_time = None
 
-        elif fcast_end_time <= last_obs_time:
-            # forecast was completely overwritten by observation data
-            self.deleteDatasetAttribute(dataset_path, 'fcast_start_time')
-            self.deleteDatasetAttribute(dataset_path, 'fcast_end_time')
-            fcast_start_time = last_obs_time
+        if fcast_end_time is not None:
+            if fcast_end_time <= last_obs_time:
+                # forecast was completely overwritten by observation data
+                self.deleteDatasetAttribute(dataset_path, 'fcast_start_time')
+                self.deleteDatasetAttribute(dataset_path, 'fcast_end_time')
 
-        else: # forecast was partially overwritten by observation data
-            fcast_start_time = \
-                self.timeAttribute(dataset_path, 'fcast_start_time')
-            if fcast_start_time <= obs_time:
-                fcast_start_time = obs_time + ONE_HOUR
-                self.setTimeAttribute(dataset_path, 'fcast_start_time',
-                                     fcast_start_time)
-            else: # None indicates that no change was made
-                fcast_start_time = None
-
-        return fcast_start_time
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def adjustLastObsHour(self, dataset_path, fcast_start_time, **kwargs):
-        """ Adjust observation hour in response to changes in forecast
-
-        Arguments
-        --------------------------------------------------------------------
-        dataset_path     : full dot path for dataset to update
-        fcast_start_time : datetime.hour representing hour of last observation
-        """
-        last_obs_time = \
-            self.timeAttribute(dataset_path, 'last_obs_time', None)
-
-        # check to see if forecast start hour stomped on obs hour
-        if last_obs_time is not None and last_obs_time >= fcast_start_time:
-            # stomped on last obs hour
-            obs_time = fcast_start_time - ONE_HOUR
-            first_time = self.timeAttribute('__file__', 'start_time')
-            if obs_time >= first_time:
-                self.setTimeAttribute(dataset_path, 'last_obs_time', obs_time,
-                                      **kwargs)
-            else:
-                # delete last obs hour attribute
-                #!TODO probably should figure out a better way to indicate
-                #      that there is no observation data
-                self.deleteDatasetAttribute(dataset_path, 'last_obs_time')
+            else: # forecast was partially overwritten by observation data
+                fcast_start_time = \
+                    self.timeAttribute(dataset_path, 'fcast_start_time')
+                if fcast_start_time <= obs_time:
+                    fcast_start_time = obs_time + ONE_HOUR
+                    self.setTimeAttribute(dataset_path, 'fcast_start_time',
+                                          fcast_start_time)
+        
+        #else: forecast has never been set
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -177,7 +144,6 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
 
         elif data.ndim == 2: # 2D array has a single hour
             return start_time
-
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -449,21 +415,51 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def setForecastTimes(self, dataset_path, start_time, end_time, **kwargs):
-        self.setTimeAttribute(dataset_path, 'fcast_start_time', start_time,
-                              **kwargs)
-        self.setTimeAttribute(dataset_path, 'fcast_end_time', end_time,
-                              **kwargs)
+        last_obs_time = self.timeAttribute(dataset_path, 'last_obs_time')
+        if end_time > last_obs_time:
+            if start_time <= last_obs_time:
+                start_time = last_obs_time + datetime.timedelta(hours=1)
 
-        # this should NEVER happen, but just in case ....
-        # make adjustments when forecast stomps on obs hour
-        self.adjustLastObsHour(dataset_path, start_time, **kwargs)
+            self.setTimeAttribute(dataset_path, 'fcast_start_time', start_time,
+                                  **kwargs)
+            self.setTimeAttribute(dataset_path, 'fcast_end_time', end_time,
+                                  **kwargs)
+            self.setLastValidTime(dataset_path, end_time, 'forecast')
+        else:
+            errmsg = 'Attmepting to set forecast prior to last observation.'
+            errmsg += '\nLast obs time = %s'
+            errmsg += '\nForecast start time = %s'
+            errmsg += '\nForecast end time = %s'
+            times = ( last_obs_time.strftime('%Y-%m-%d:%H'),
+                      start_time.strftime('%Y-%m-%d:%H'),
+                      end_time.strftime('%Y-%m-%d:%H') )
+            raise ValueError, errmsg % times
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def setLastObsTime(self, dataset_path, hour, **kwargs):
-        self.setTimeAttribute(dataset_path, 'last_obs_time', hour, **kwargs)
-        # make adjustments when obs hour stomps on forecast
-        self.adjustForecast(dataset_path, hour, **kwargs)
+        last_obs_time = self.timeAttribute(dataset_path, 'last_obs_time')
+        if last_obs_time is None or hour > last_obs_time:
+            self.setTimeAttribute(dataset_path, 'last_obs_time', hour,
+                                  **kwargs)
+            self.setLastValidDate(dataset_path, hour, 'unknown')
+            # make adjustments when obs hour stomps on forecast
+            self.adjustForecast(dataset_path, hour, **kwargs)
+
+        elif hour < last_obs_time:
+            errmsg = 'Attmepting to set last_obs_time prior to current last observation.'
+            errmsg += '\nCurrent obs time = %s'
+            errmsg += '\nRequested obs time = %s'
+            raise ValueError, errmsg % (last_obs_time.strftime('%Y-%m-%d:%H'),
+                                        hour.strftime('%Y-%m-%d:%H'))
+        # else: do nothing, hour is the same as last_obs_time
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setLastValidTime(self, dataset_path, hour, source):
+        last_valid_time = self.timeAttribute(dataset_path, 'last_valid_time')
+        if last_valid_time is None or hour > last_valid_time:
+            self.setTimeAttribute(dataset_path, 'last_valid_time', hour)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -482,6 +478,7 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
             self.setObjectAttribute(dataset_path, attribute_name, hour_str)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def setTimeAttributes(self, dataset_path, include_timezone=False, **hours):
         for attribute_name, hour in hours.items():
             self.setTimeAttribute(dataset_path, attribute_name, hour,
@@ -489,20 +486,16 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def setValidationTime(self, path, start_time, end_time, **kwargs):
+    def setValidationTime(self, path, start_time, end_time, source):
         # dataset period must be 'hour'
         period = self.getDatasetAttribute(path, 'period', None)
         if period != 'hour': return
 
         # data was either source observations or from a forecast
-        is_forecast = kwargs.get('forecast', False)
-        if is_forecast:
+        if source == 'forecast':
             self.setForecastTimes(path, start_time, end_time, **kwargs)
-        else:
-            self.setLastObsTime(path, end_time, **kwargs)
-
-        # update last valid hour
-        self.setTimeAttribute(path, 'last_valid_time', end_time, **kwargs)
+        else: self.setLastObsTime(path, end_time, **kwargs)
+        self.setLastValidTime(path, end_time, source)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

@@ -81,30 +81,39 @@ class FileBuilderMethods:
         file_attrs =  self._resolveCommonAttributes(**kwargs)
         scope = self.filetype.get('scope',None)
         if scope is not None: file_attrs['scope'] = scope
+
+        file_attrs.update(self.sourceFileAttributes(**kwargs))
+
         # subclasses may require additional file attributes
         more_attrs = self.additionalFileAttributes(**kwargs)
         if more_attrs:
             file_attrs.update(more_attrs)
 
-        source = self.source
-        file_attrs['source'] = source.description
-        node_spacing = source.get('node_spacing',None)
-        if node_spacing is not None:
-            file_attrs['node_spacing'] = node_spacing 
-        search_radius = source.get('search_radius',None)
-        if search_radius is not None:
-            file_attrs['search_radius'] = search_radius
-        source_tag = source.get('tag', source.name.upper())
-
-        description = self._fileDescription(source_tag, **kwargs)
-        file_attrs['description'] = description
-
-        bbox = kwargs.get('bbox', None)
-        if bbox is not None: file_attrs['data_bbox'] = bbox
-
         self.open('a')
         self.setFileAttributes(**file_attrs)
         self.close()
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def sourceFileAttributes(self, **kwargs):
+        source = self.source
+        attrs = { 'source': source.description, }
+        node_spacing = source.get('node_spacing',None)
+        if node_spacing is not None:
+            attrs['node_spacing'] = node_spacing 
+        search_radius = source.get('search_radius',None)
+        if search_radius is not None:
+            attrs['search_radius'] = search_radius
+
+        bbox = kwargs.get('bbox', None)
+        if bbox is not None: attrs['data_bbox'] = bbox
+
+        description = self._fileDescription(source, **kwargs)
+        attrs['description'] = description
+
+        return attrs
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     # default is no additional file attributes
     def additionalFileAttributes(self, **kwargs):
@@ -267,7 +276,8 @@ class FileBuilderMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _fileDescription(self, source_tag, **kwargs):
+    def _fileDescription(self, source, **kwargs):
+        source_tag = source.get('tag', source.name.upper())
         template = self._fileDescriptionTemplate(self.filetype)
         descrip_dict = copy(kwargs)
         if 'source' not in descrip_dict: 

@@ -91,7 +91,9 @@ class Hdf5GridFileMixin:
         """ Returns the indexes of the grid node that is closest to the
         lon/lat coordinate point.
         """
-        return self._indexOfClosestNode(lon, lat)
+        if hasattr(self, 'nodeIndexer'):
+            return self.nodeIndexer(lon, lat)
+        else: return self._indexOfClosestNode(lon, lat)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -104,6 +106,9 @@ class Hdf5GridFileMixin:
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def setCoordinateBounds(self, point_or_bbox, tolerance=None):
+        if isinstance(point_or_bbox, basestring):
+            point_or_bbox = eval(point_or_bbox)
+
         if len(point_or_bbox) == 2:
             self._coord_bounds = None
             self._y, self._x = self.ll2index(*point_or_bbox)

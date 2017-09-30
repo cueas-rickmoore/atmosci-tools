@@ -3,6 +3,7 @@ import os
 import datetime
 
 from atmosci.utils import tzutils
+from atmosci.utils.timeutils import lastDayOfMonth
 
 from atmosci.seasonal.methods.access  import BasicFileAccessorMethods
 from atmosci.seasonal.methods.factory import MinimalFactoryMethods
@@ -13,7 +14,6 @@ from atmosci.seasonal.methods.static  import StaticFileAccessorMethods
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 from atmosci.reanalysis.config import CONFIG
-
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -31,47 +31,89 @@ class ReanalysisFactoryMethods(PathConstructionMethods,
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def availableTimeSpan(self, num_hours=3):
-        latest_time = datetime.datetime.utcnow()
-        if latest_time.minute < 30: previous_hour = 2
-        else: previous_hour = 1
-        latest_time.replace(minute=0, second=0, microsecond=0)
-        latest_time -= datetime.timedelta(hours=previous_hour)
-        return (latest_time-datetime.timedelta(hours=num_hours), lastest_time)
+    def fcastObsTimespan(self, reference_date_or_time, **kwargs):
+        if isinstance(reference_date_or_time, datetime.date):
+            target = kwargs.get('target_hour', self.project.target_hour)
+            ref_time = datetime.datetime.combine(reference_date_or_time,
+                                                 datetime.time(target))
+        else: # assume it is already a datetime.datetime
+            ref_time = reference_date_or_time
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def fileTimespan(self, reference_date, obs_days, fcast_days, target_hour=7,
-                           timezone='UTC'):
-        reference_time = datetime.datetime.combine(reference_date,
-                                           datetime.time(target_hour,0,0,0))
-        reference_time = tzutils.asHourInTimezone(reference_time, timezone)
+        timezone = kwargs.get('timezone', 'UTC')
+        ref_time = tzutils.asHourInTimezone(ref_time, timezone)
+        
+        fcast_days = kwargs.get('fcast_days',self.project.fcast_days)
         fcast_hours = fcast_days * 24
-        end_time = reference_time + datetime.timedelta(hours=fcast_hours)
+        end_time = ref_time + datetime.timedelta(hours=fcast_hours)
+
+        obs_days = kwargs.get('obs_days',self.project.obs_days)
         obs_hours = obs_days * 24
-        start_time = reference_time - datetime.timedelta(hours=obs_hours)
+        start_time = ref_time - datetime.timedelta(hours=obs_hours)
 
-        return start_time, reference_time, end_time
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def setAnalysisSource(self, analysis_type):
-        if '.' in analysis_type:
-            analysis, grib_source = analysis_type.split('.')
-            self.analysis = analysis
-            self.anal_config = self.config.sources[analysis]
-            self.setGribSource(grib_source)
-        else:
-            self.analysis = analysis_type
-            self.anal_config = self.config.sources[analysis_type]
-            self.grib_source = None
+        return start_time, ref_time, end_time
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def setGribSource(self, grib_source):
-        if isinstance(grib_source, basestring):
-            self.grib_source = self.anal_config[grib_source]
-        else: self.grib_source = grib_source.copy()
+    def gribVariableName(self, key):
+        var_name = self.reanalysis.grib.variable_map.get(key, key.upper())
+        if var_name in self.reanalysis.grib.variable_names:
+            return var_name
+        raise KeyError, '"%s" is not a valid GRIB variable key' % key
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def gridVariableName(self, key):
+        var_name = self.reanalysis.grid.variable_map.get(key, key.upper())
+        if var_name in self.reanalysis.grid.variable_names:
+            return var_name
+        raise KeyError, '"%s" is not a valid GRID variable key' % key
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def monthTimespan(self, reference_date, **kwargs):
+        if reference_date.day == 1: ref_date = reference_date
+        else: ref_date = reference_date.replace(day=1) 
+        ref_time = \
+            datetime.datetime.combine(ref_date,datetime.time(hour=0))
+
+        timezone = kwargs.get('timezone', 'UTC')
+        start_time = ref_time = tzutils.asHourInTimezone(ref_time, timezone)
+        num_days = lastDayOfMonth(ref_date.year, ref_date.month)
+        end_time = start_time.replace(day=num_days, hour=23)
+
+        return start_time, end_time
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def fileTimespan(self, reference_date, **kwargs):
+        if isinstance(reference_date, tuple):
+            if len(reference_date == 2):
+                ref_date = reference_date + (1,)
+            else: ref_date = reference_date
+        else: # assume it is datetime.date or datetime.date_time
+            ref_date = \
+                (reference_date.year, reference_date.month, reference_date.day)
+
+        ref_date = datetime.date(*ref_date)
+        if kwargs.get('grid_subdir_by_hours',False):
+            # timespan based number of hours in obs_days + fcast_days
+            start_time, ref_time, end_time = \
+                self.fcastObsTimespan(reference_date, **kwargs)
+
+        else: # timespan based on number of days in a month 
+            start_time, end_time = self.monthTimespan(ref_date, **kwargs)
+            ref_time = start_time
+        
+        num_hours = tzutils.hoursInTimespan(start_time, end_time)
+        return start_time, ref_time, end_time, num_hours
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setDataSource(self, data_source, **kwargs):
+        if isinstance(data_source, basestring):
+            self.source = self.anal_config[data_source]
+        else: # assume it is an atmosci.utils.config ConfigObject
+            self.source = data_source.copy()
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -101,12 +143,16 @@ class ReanalysisFactoryMethods(PathConstructionMethods,
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _initReanalysisFactory_(self, analysis_type, timezone='UTC', **kwargs):
+    def _initReanalysisFactory_(self, analysis_type, **kwargs):
+        self.project = self.config.project
+        self.reanalysis = self.config.sources.reanalysis
+        self.setAnalysisType(analysis_type) # also sets source
+
+        timezone = kwargs.get('timezone', self.source.get('timezone', 'UTC'))
+        self.setTimezone(timezone)
+
         if kwargs.get('use_dev_env', False):
             self.useDirpathsForMode('dev')
-        self.reanalysis = self.config.sources.reanalysis.project
-        self.setAnalysisSource(analysis_type)
-        self.setTimezone(timezone)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -116,13 +162,10 @@ class ReanalysisGribFactoryMethods(ReanalysisFactoryMethods):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def gribDirpath(self, target_hour, region, **kwargs):
-        if self.project.get('shared_grib_dir',
-                self.reanalysis.get('shared_grib_dir', False) ):
+        if self.project.get('shared_grib_dir', False):
             root_dir = self.sharedRootDir()
         else:
-            root_dir = self.project.get('grib_dirpath',
-                            self.reanalysis.get('grib_dirpath',
-                                 self.appDataRootDir() ) )
+            root_dir = self.project.get('grib_dirpath', self.appDataRootDir())
         # check for subdir path definition
         subdir = self.gribSubdir()
         if subdir is not None: root_dir = os.path.join(root_dir, subdir)
@@ -130,7 +173,7 @@ class ReanalysisGribFactoryMethods(ReanalysisFactoryMethods):
         arg_dict = self.utcTimes(target_hour)
         arg_dict['analysis'] = self.analysis
         arg_dict['region'] = region
-        arg_dict['source'] = self.grib_source.name
+        arg_dict['source'] = self.source.name
         grib_dirpath = root_dir % arg_dict
         # check for existence of the directory
         if not os.path.exists(grib_dirpath):
@@ -145,16 +188,16 @@ class ReanalysisGribFactoryMethods(ReanalysisFactoryMethods):
 
     def gribFilename(self, target_hour, variable, region, **kwargs):
         template = self.gribFilenameTemplate(variable)
-        template_args = \
+        arg_dict = \
             self._templateArgs(target_hour, variable, region, **kwargs)
-        if kwargs: template_args.update(dict(kwargs))
-        return template % template_args
+        if kwargs: arg_dict.update(dict(kwargs))
+        return template % arg_dict
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def gribFilenameTemplate(self, variable):
-        template = self.grib_source.local_file_map.get(variable,
-                        self.grib_source.local_file_map.get('default', None))
+    def gribFilenameTemplate(self, variable, **kwargs):
+        template = self.source.local_file_map.get(variable,
+                        self.source.local_file_map.get('default', None))
         if template is None:
             errmsg = 'No filename template for "%s" variable.'
             raise LookupError, errmsg % variable
@@ -183,22 +226,42 @@ class ReanalysisGribFactoryMethods(ReanalysisFactoryMethods):
         filepath = self.gribFilepath(target_hour, variable, region, **kwargs)
         Class = self.fileAccessorClass('grib', 'read')
         debug = kwargs.get('debug',False)
-        grib_source = kwargs.get('grib_source', self.grib_source)
-        return Class(filepath, grib_source, debug)
+        source = kwargs.get('source', self.source)
+        return Class(filepath, source, debug)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def gribSubdir(self):
-        subdir = self.grib_source.get('grib_subdir',
-                      self.project.get('grib_subdir',
-                           self.reanalysis.get('grib_subdir', None) ) )
+        subdir = self.source.get('grib_subdir',
+                      self.reanalysis.get('grib.subdir', None))
         if isinstance(subdir, tuple): return os.path.join(*subdir)
         return subdir
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setAnalysisType(self, analysis_type, **kwargs):
+        analysis, source = analysis_type.split('.')
+        self.analysis = analysis
+
+        if self.analysis == 'rtma':
+            from atmosci.reanalysis.rtma.config import RTMA_SOURCES
+            self.anal_config = RTMA_SOURCES
+        elif self.analysis == 'urma':
+            from atmosci.reanalysis.urma.config import URMA_SOURCES
+            self.anal_config = URMA_SOURCES
+        else:
+            errmsg = '"%s" is an unsupported reanalysis.'
+            raise KeyError, errmsg % self.analysis
+
+        self.setDataSource(source, **kwargs)
+        self.region = kwargs.get('region',
+                             self.anal_config.get('region',
+                                  self.source.get('region', 'conus')))
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def serverURL(self, server_type='http'):
-        return self.grib_source.get(server_type, None)
+        return self.source.get(server_type, None)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -206,15 +269,11 @@ class ReanalysisGribFactoryMethods(ReanalysisFactoryMethods):
         template_args = tzutils.utcTimeStrings(target_hour)
         template_args['analysis'] = self.analysis
         template_args['region'] = region
-        template_args['source'] = self.grib_source.name
+        template_args['source'] = self.source.name
         template_args['variable'] = variable
         return template_args
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _initReanalysisGribFactory_(self, grib_source_path, **kwargs):
-        self.setAnalysisSource(grib_source_path)
-        self._initReanalysisFactory_(grib_source_path, **kwargs)
 
     def _registerAccessClasses(self):
         if not hasattr(self, 'AccessClasses'):
@@ -226,20 +285,25 @@ class ReanalysisGribFactoryMethods(ReanalysisFactoryMethods):
         from atmosci.seasonal.static import StaticGridFileReader
         self._registerAccessManager('static', 'read', StaticGridFileReader)
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _initReanalysisGribFactory_(self, analysis_source, **kwargs):
+        self._initReanalysisFactory_(analysis_source, **kwargs)
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class ReanalysisGribFileFactory(ReanalysisGribFactoryMethods,
-                                StaticFileAccessorMethods, object):
+class ReanalysisGribFileFactory(StaticFileAccessorMethods,
+                                ReanalysisGribFactoryMethods, object):
     """
     Basic factory for accessing data in Reanalysis grib files.
     """
-    def __init__(self, grib_source_path, config_object=CONFIG, **kwargs):
+    def __init__(self, analysis_source, config_object=CONFIG, **kwargs):
         # initialize common configuration structure
         self._initFactoryConfig_(config_object, None, 'project')
 
         # initialize reanalysis grib-specific configuration
-        self._initReanalysisGribFactory_(grib_source_path, **kwargs)
+        self._initReanalysisGribFactory_(analysis_source, **kwargs)
 
         # simple hook for subclasses to initialize additonal attributes  
         self.completeInitialization(**kwargs)
@@ -251,47 +315,74 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
  
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def analysisGridDirpath(self, variable, region, **kwargs):
-        if self.project.get('shared_grid_dir', 
-                self.reanalysis.get('shared_grid_dir', False) ):
+    def analysisGridDirpath(self, reference_time, variable, region, **kwargs):
+        if self.project.get('shared_grid_dir', False):
             root_dir = self.sharedRootDir()
         else:
             root_dir = self.config.dirpaths.get(self.analysis,
                             self.config.dirpaths.get('reanalysis',
                                  self.projectRootDir()))
-        subdir = self.gridSubdir()
+        subdir = self.gridSubdir(**kwargs)
         if subdir is not None: root_dir = os.path.join(root_dir, subdir)
-        template_args = self._templateArgs(variable, region, **kwargs)
-        grid_dirpath = root_dir % template_args
+        arg_dict = \
+            self._templateArgs(reference_time, variable, region, **kwargs)
+        arg_dict['region'] = self.regionToDirpath(arg_dict['region'])
+        grid_dirpath = root_dir % arg_dict
         if not os.path.exists(grid_dirpath):
             if kwargs.get('file_must_exist', False):
                 errmsg = 'Reanalysis directory does not exist :\n%s'
                 raise IOError, errmsg % grid_dirpath
-            else: os.makedirs(grid_dirpath)
+            elif kwargs.get('make_grid_dirs', True):
+                os.makedirs(grid_dirpath)
         return grid_dirpath
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def analysisGridFilename(self, variable, region, **kwargs):
-        template = self.gridFilenameTemplate(variable)
+    def analysisGridFilename(self, ref_time, variable, region, **kwargs):
+        template = self.gridFilenameTemplate(variable, **kwargs)
         if template is None:
             raise LookupError, 'No template for "%s" grid file name' % variable
-        template_args = self._templateArgs(variable, region, **kwargs)
-        return template % template_args
+        arg_dict = self._templateArgs(ref_time, variable, region, **kwargs)
+        arg_dict['region'] = self.regionToFilepath(arg_dict['region'])
+        return template % arg_dict
  
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def analysisGridFilepath(self, variable, region, **kwargs):
+    def analysisGridFilepath(self, reference_time, variable, region, **kwargs):
         filepath = kwargs.get('filepath', None)
         if filepath is None:
-            root_dir = self.analysisGridDirpath(variable, region, **kwargs)
-            filename = self.analysisGridFilename(variable, region, **kwargs)
+            root_dir = self.analysisGridDirpath(reference_time, variable,
+                                                region, **kwargs)
+            filename = self.analysisGridFilename(reference_time, variable,
+                                                region, **kwargs)
             filepath = os.path.join(root_dir, filename)
         if kwargs.get('file_must_exist', False):
             if not os.path.isfile(filepath):
                 errmsg = 'Reanalysis grid file does not exist :\n    %s'
                 raise IOError, errmsg % filepath
         return filepath
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def availableMonths(self, reference_time, region, variable=None):
+        months = [ ]
+
+        ref_time = reference_time.replace(day=1, hour=0)
+        dirpath = self. analysisGridDirpath(ref_time, variable, region,
+                                            make_grid_dirs=False)
+        if os.path.exists(dirpath): months.append(ref_time.month)
+        prev_month_str = ref_time.strftime('%Y%m')
+
+        if ref_time.month < 12:
+            for month in range(ref_time.month+1, 13):
+                ref_time = ref_time.replace(month=month)
+                month_str = ref_time.strftime('%Y%m')
+                dirpath = dirpath.replace(prev_month_str, month_str)
+                if os.path.exists(dirpath):
+                    months.append(ref_time)
+                prev_month_str = month_str
+
+        return tuple(months)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -308,33 +399,39 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def gridFileBuilder(self, variable, region, lons=None, lats=None, 
-                              **kwargs):
-        filepath = self.analysisGridFilepath(variable, region, **kwargs)
+    def gridFileBuilder(self, reference_time, variable, region, timezone,
+                              lons=None, lats=None, **kwargs):
+        filepath = self.analysisGridFilepath(reference_time, variable,
+                                             region, **kwargs)
+        kwargs['timezone'] = timezone
+        kwargs.update(self._extractTimes(reference_time, **kwargs))
+        del kwargs['timezone']
         Class = self.fileAccessorClass('build')
-        # filetype == variable
-        # source = self.analysis = self.anal_config
-        return Class(filepath, CONFIG, variable, region, self.anal_config,
-                     self.tzinfo, lons, lats, **kwargs)
+        return Class(filepath, CONFIG, variable, region, self.source,
+                     reference_time, timezone, lons, lats, **kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def gridFileManager(self, variable, region, **kwargs):
-        filepath = self.analysisGridFilepath(variable, region, **kwargs)
+    def gridFileManager(self, reference_time, variable, region, **kwargs):
+        filepath = self.analysisGridFilepath(reference_time, variable,
+                                             region, **kwargs)
         Class = self.fileAccessorClass('manage')
         return Class(filepath, kwargs.get('mode','r'))
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def gridFileReader(self, variable, region, **kwargs):
-        filepath = self.analysisGridFilepath(variable, region, **kwargs)
+    def gridFileReader(self, reference_time, variable, region, **kwargs):
+        filepath = self.analysisGridFilepath(reference_time, variable,
+                                             region, **kwargs)
         Class = self.fileAccessorClass('read')
         return Class(filepath)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def gridFilenameTemplate(self, variable):
-        template = self.reanalysis.grid_file_map.get(variable, None)
+    def gridFilenameTemplate(self, variable, **kwargs):
+        if kwargs.get('subdir_by_hours',False):
+            template = self.fcast_obs_file_map.get(variable, None)
+        else: template = self.month_file_map.get(variable, None)
         if template is None:
             errmsg = 'No template found for "%s" variable.'
             raise ValueError, errmsg % variable
@@ -342,71 +439,62 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def gridSubdir(self):
-        if self.grib_source is None:
-            subdir = self.project.get('grid_subdir',
-                          self.reanalysis.get('grid_subdir', None) )
-        else:
-            subdir = self.grib_source.get('grid_subdir',
-                          self.project.get('grid_subdir',
-                               self.reanalysis.get('grid_subdir', None) ) )
+    def gridSubdir(self, **kwargs):
+        if kwargs.get('subdir_by_hours',False):
+            subdir = self.source.subdir_by_hours
+        else: subdir = self.source.subdir_by_year
+
         if isinstance(subdir, tuple): return os.path.join(*subdir)
-        return subdir
+        else: return subdir
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setAnalysisType(self, analysis_type, **kwargs):
+        self.analysis = analysis_type
+        self.anal_config = None
+        self.source = self.config.sources.reanalysis.grid
+        self.region = kwargs.get('region',
+                             self.source.get('region', 'conus'))
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _extractTimes(self, **kwargs):
-        times_missing = 'Neither "start_time" nor "end_time" were found in'
-        times_missing += ' **kwargs. One of them MUST be specified.'
-        hours_mising = '"num_hours" must be passed via **kwargs when only' 
-        hours_mising = ' "%s" is specified' 
-
-        timezone = kwargs.get('timezone', self.tzinfo)
-        if tzutils.isValidTimezone(timezone): tzinfo = timezone
-        else: tzinfo = tzutils.asTimezoneObj(timezone)
-
+    def _extractTimes(self, ref_time, **kwargs):
         start_time = kwargs.get('start_time', None)
         if start_time is None:
-            end_time = kwargs.get('end_time', None)
-            assert(end_time is not None), times_missing
-            end_time = tzutils.asHourInTimezone(end_time, tzinfo)
-            num_hours = kwargs.get('num_hours', None)
-            assert(num_hours is not None), hours_missing % 'end_time'
-            start_time = end_time - datetime.timedelta(hours=num_hours)
-        else:
-            start_time = tzutils.asHourInTimezone(start_time, tzinfo)
-            end_time = kwargs.get('end_time', None)
-            if end_time is None:
-                num_hours = kwargs.get('num_hours', None)
-                assert(num_hours is not None), hours_missing % 'start_time'
-                end_time = start_time + datetime.timedelta(hours=num_hours)
+            if kwargs.get('grid_subdir_by_hours',False):
+                start_time, xxx, end_time = \
+                    self.fcastObsTimespan(ref_time, **kwargs)
             else:
-                end_time = tzutils.asHourInTimezone(end_time, tzinfo)
-                num_hours = tzutils.timeDifferenceInHours(start_time, end_time)
-
-        times = self.utcTimes(end_time, **kwargs)
-        times['end_time'] = end_time
-        times['num_hours'] = num_hours
-        times['start_time'] = start_time
-        return times
+                start_time, end_time = self.monthTimespan(ref_time, **kwargs)
+        else: end_time = kwargs.get('end_time')
+        num_hours = tzutils.hoursInTimespan(start_time, end_time)
+                
+        return { 'end_time': end_time,
+                 'num_hours': num_hours,
+                 'start_time': start_time }
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _templateArgs(self, variable, region, **kwargs):
-        template_args = self._extractTimes(**kwargs)
+    def _templateArgs(self, ref_time, variable, region, **kwargs):
+        template_args = tzutils.tzaTimeStrings(ref_time, 'target')
+        times = self._extractTimes(ref_time, **kwargs)
+        if kwargs.get('grid_subdir_by_hours',False):
+            template_args['num_hours'] = times['num_hours']
+
         template_args['analysis'] = self.analysis
         template_args['region'] = region
-        if self.grib_source is not None:
-            template_args['source'] = self.grib_source.name
+        if self.source is not None:
+            template_args['source'] = self.source.get('tag', self.source.name)
         if variable is not None:
             template_args['variable'] = variable
         return template_args
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _initReanalysisGridFactory_(self, analysis_type, timezone='UTC',
-                                          **kwargs):
-        self._initReanalysisFactory_(analysis_type, timezone)
+    def _initReanalysisGridFactory_(self, analysis_type, **kwargs):
+        self._initReanalysisFactory_(analysis_type, **kwargs)
+        self.month_file_map = self.reanalysis.grid_file_maps.month
+        self.fcast_obs_file_map = self.reanalysis.grid_file_maps.fcast_obs
         if kwargs.get('use_dev_env', False): self.useDirpathsForMode('dev')
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -416,12 +504,12 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
         if not hasattr(self, 'AccessClasses'):
             self.AccessClasses = ConfigObject('AccessClasses', None)
 
-        from atmosci.hourly.grid import HourlyGridFileReader, \
-                                        HourlyGridFileManager
-        from atmosci.hourly.builder import HourlyGridFileBuilder
-        self._registerAccessManagers('reanalysis', HourlyGridFileReader,
-                                                   HourlyGridFileManager,
-                                                   HourlyGridFileBuilder)
+        from atmosci.reanalysis.grid import ReanalysisGridFileReader, \
+                                            ReanalysisGridFileManager, \
+                                            ReanalysisGridFileBuilder
+        self._registerAccessManagers('reanalysis', ReanalysisGridFileReader,
+                                                   ReanalysisGridFileManager,
+                                                   ReanalysisGridFileBuilder)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -430,8 +518,9 @@ class ReanalysisGridFileFactory(ReanalysisGridFactoryMethods, object):
     """
     Basic factory for accessing data in Reanalysis grib files.
     """
-    def __init__(self, analysis_type='reanalysis',
-                       config_object=CONFIG, **kwargs):
+    def __init__(self, config_object=CONFIG, analysis_type='reanalysis',
+                       **kwargs):
+
         # initialize common configuration structure
         self._initFactoryConfig_(config_object, None, None)
 

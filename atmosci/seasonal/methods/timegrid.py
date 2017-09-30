@@ -31,10 +31,12 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
             raise TypeError, errmsg % str(type(date1))
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def dateAttributes(self, dataset_path, convert=False):
+    """
+    def dateAttributes(self, object_path=None, convert=False):
         dates = { }
-        attrs = self.datasetAttributes(dataset_path)
+        if object_path is None:
+            attrs = self.fileAttributes(object_path)
+        else: attrs = self.objectAttributes(object_path)
         if convert:
             for key in attrs:
                 if key.endswith('date'):
@@ -43,7 +45,7 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
             for key in attrs:
                 if key.endswith('date'): dates[key] = attrs[key]
         return dates
-
+    """
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def dataForTime(self, dataset_path, time_obj, lon=None, lat=None,
@@ -85,28 +87,6 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
     def lastValidTime(self, dataset_path, limit='valid'):
         attrs = self.getDatasetAttribute(dataset_path)
         return attrs('last_%s_%s' % (limit, attrs['period']))
-
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # single time index
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _timeToIndex(self, dataset_path, time_obj):
-        period = self.getDatasetAttribute(dataset_path, 'period', None)
-        if period is not None:
-            if period == 'doy':
-                return self._doyToIndex(dataset_path, time_obj)
-            elif period in ('date','day'):
-                return self._dateToIndex(dataset_path, time_obj)
-            elif period == 'year':
-                return self._yearToIndex(dataset_path, time_obj)
-            else:
-                errmsg = '%s does not support indexing by "%s"'
-                raise AttributeError, errmsg % (self.__class__.__name__, period)
-        else:
-            errmsg = '"%s" dataset is not indexable by time.'
-            errmsg += ' It does not have a "period" attribute.'
-            raise IndexError, errmsg % dataset_path
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -501,23 +481,31 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
 
     def insertTimeSlice(self, dataset_path, start_time_obj, data, **kwargs):
         start_indx = self._timeToIndex(dataset_path, start_time_obj)
-        self._insertTimeSlice(dataset_path, start_indx, data)
+        end_indx = self._insertTimeSlice(dataset_path, start_indx, data)
+        return end_indx - start_indx
 
     def insertByTime(self, dataset_path, time_obj, data, **kwargs):
         time_indx = self._timeToIndex(dataset_path, time_obj)
         self._insertByTimeIndex(dataset_path, time_indx, data)
+        return 1
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def refreshDataset(self, dataset_path, start_date, data, **kwargs):
         if data.ndim == 3:
-            self.insertTimeSlice(dataset_path, start_date, data, **kwargs)
-        else: self.insertByTime(dataset_path, start_date, data, **kwargs)
+            span = \
+                self.insertTimeSlice(dataset_path, start_date, data, **kwargs)
+        else: 
+            span = self.insertByTime(dataset_path, start_date, data, **kwargs)
+        return self._endTimeFromSpan(dataset_path, start_date, span)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def updateDataset(self, dataset_path, start_date, data, **kwargs):
-        self.refreshDataset(dataset_path, start_date, data, **kwargs)
+        end_date = \
+            self.refreshDataset(dataset_path, start_date, data, **kwargs)
         self.setValidationDate(dataset_path, start_date, data, **kwargs)
-
+        return end_date
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     #
@@ -589,7 +577,6 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
                 records.append(record)
             return records
 
-
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     #
     # generic provenance update methods
@@ -626,6 +613,7 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
         provenance = N.rec.fromrecords(records, shape=(num_days,),
                            formats=list(formats), names=list(names))
         dataset[start_index:end_index] = provenance
+        return num_days
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -670,7 +658,7 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
                            formats=list(formats), names=list(names))
         dataset[start_index:end_index] = provenance
 
-        return prov_path
+        return prov_path, num_days
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -695,8 +683,9 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
         data       : 2D or 3D grid - data to be used to calculated
                      provenance statistics. If 3D, 1st dimension must be time.
         """
-        self.insertProvenance(prov_path, start_date, data, **kwargs)
+        span = self.insertProvenance(prov_path, start_date, data, **kwargs)
         self.setValidationDate(prov_path, start_date, data, **kwargs)
+        return self._endTimeFromSpan(prov_path, start_date, span)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -717,10 +706,10 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
                          data to be used to calculate provenance statistics.
                          If 3D, time must be the 1st dimension.
         """
-        prov_path = self.insertGroupProvenance(path, start_date, data_1,
-                                               data_2, **kwargs)
+        prov_path, span = self.insertGroupProvenance(path, start_date, data_1,
+                                                     data_2, **kwargs)
         self.setValidationDate(prov_path, start_date, data_1, **kwargs)
-
+        return self._endTimeFromSpan(path, start_date, span)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     #
@@ -868,8 +857,8 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def setLastObsDate(self, dataset_path, date):
-        self.setDateAttribute(dataset_path, attribute_name, date)
+    def setLastObsDate(self, dataset_path, date, attr_name='last_obs_date'):
+        self.setDateAttribute(dataset_path, attr_name, date)
         # make adjustments when obs date stomps on forecast
         self.adjustForecastStartDate(dataset_path, date)
 
@@ -916,6 +905,74 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
                     self.setDateAttribute(path, 'last_valid_date', last_date)
 
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _dataEndTime(self, dataset_path, time_obj, data):
+        period = self.getDatasetAttribute(dataset_path, 'period', None)
+        if period is not None:
+            ndims = len(data.shape)
+            if ndims == 3: span = data.shape[0]
+            elif ndims == 2: span = 1
+            else:
+                #TODO: figure out a better solution here
+                return None
+
+            if span == 1: return time_obj
+            if period in ('date','day'):
+                return time_obj + datetime.timedelta(days=span-1)
+            elif period in ('doy','year'):
+                return time_obj + span - 1
+            else:
+                errmsg = '%s does not support indexing by "%s"'
+                class_name = self.__class__.__name__
+                raise AttributeError, errmsg % (class_name, period)
+        else:
+            errmsg = '"%s" dataset is not indexable by time.'
+            errmsg += ' It does not have a "period" attribute.'
+            raise IndexError, errmsg % dataset_path
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _endTimeFromSpan(self, dataset_path, time_obj, span):
+        period = self.getDatasetAttribute(dataset_path, 'period', None)
+        if period is not None:
+            if span == 1: return time_obj
+            if period in ('date','day'):
+                return time_obj + datetime.timedelta(days=span-1)
+            elif period in ('doy','year'):
+                return time_obj + span - 1
+            elif period == 'hour':
+                return time_obj + datetime.timedelta(hours=span-1)
+            else:
+                errmsg = '%s does not support indexing by "%s"'
+                class_name = self.__class__.__name__
+                raise AttributeError, errmsg % (class_name, period)
+        else:
+            errmsg = '"%s" dataset is not indexable by time.'
+            errmsg += ' It does not have a "period" attribute.'
+            raise IndexError, errmsg % dataset_path
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _timeToIndex(self, dataset_path, time_obj):
+        period = self.getDatasetAttribute(dataset_path, 'period', None)
+        if period is not None:
+            if period == 'doy':
+                return self._doyToIndex(dataset_path, time_obj)
+            elif period in ('date','day'):
+                return self._dateToIndex(dataset_path, time_obj)
+            elif period == 'year':
+                return self._yearToIndex(dataset_path, time_obj)
+            else:
+                errmsg = '%s does not support indexing by "%s"'
+                class_name = self.__class__.__name__
+                raise AttributeError, errmsg % (class_name, period)
+        else:
+            errmsg = '"%s" dataset is not indexable by time.'
+            errmsg += ' It does not have a "period" attribute.'
+            raise IndexError, errmsg % dataset_path
+
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     #
     # time slicing method overrides
@@ -935,6 +992,7 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
                 dataset[:,:,start_indx:end_indx] = \
                     self._processDataIn(dataset_path, data, **kwargs)
         elif data.ndim == 2:
+            end_indx = start_indx
             if view in ('tyx','txy'):
                 dataset[start_indx,:,:] = \
                     self._processDataIn(dataset_path, data, **kwargs)
@@ -946,6 +1004,7 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
             raise IndexError, errmsg % dataset_path
 
         dataset.attrs['updated'] = self.timestamp
+        return end_indx
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -963,4 +1022,5 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
             raise IndexError, errmsg % dataset_path
 
         dataset.attrs['updated'] = self.timestamp
+        return time_indx
 
