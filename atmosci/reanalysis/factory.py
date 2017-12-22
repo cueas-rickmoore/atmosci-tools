@@ -408,7 +408,7 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
         del kwargs['timezone']
         Class = self.fileAccessorClass('build')
         return Class(filepath, CONFIG, variable, region, self.source,
-                     reference_time, timezone, lons, lats, **kwargs)
+                     reference_time, timezone, lons, lats, kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

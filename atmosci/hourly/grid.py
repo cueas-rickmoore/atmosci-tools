@@ -18,29 +18,12 @@ from atmosci.hdf5.hourgrid import Hdf5HourlyGridFileReader, \
 from atmosci.seasonal.methods.grid import GridFileReaderMethods, \
                                           GridFileManagerMethods
 
+from atmosci.seasonal.methods.provenance import ProvenanceManagerMethods
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# Provenance generators
-#
-# record generator for time with value accumulation
-def timeAccumStatsProvenanceGenerator(source, hour, timestamp, hourly,
-                                      accumulated):
-    return (tzutils.hourAsString(hour),
-            N.nanmin(hourly), N.nanmax(hourly),
-            N.nanmean(hourly), nanMedian(hourly,axis=None),
-            N.nanmin(accumulated), N.nanmax(accumulated),
-            N.nanmean(accumulated), nanMedian(accumulated,axis=None),
-            timestamp, source)
 
-def timeStampProvenanceGenerator(source, hour, timestamp, data):
-    return (tzutils.hourAsString(hour), timestamp, source)
-
-def timeStatsProvenanceGenerator(source, hour, timestamp, data):
-    return (tzutils.hourAsString(hour),
-            N.nanmin(data), N.nanmax(data),
-            N.nanmean(data), nanMedian(data,axis=None),
-            timestamp, source)
-
+from atmosci.hourly.prov_config import PROVENANCE
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -62,7 +45,7 @@ class HourlyGridFileReaderMethods(GridFileReaderMethods):
         self._loadDatasetAttrs_()
         self._postLoadFileAttrs_()
 
-    def _preInitHourlyFileReader_(self, **kwargs):
+    def _preInitHourlyFileReader_(self, kwarg_dict):
         self._unpackers = { }
 
 
@@ -85,6 +68,7 @@ class HourlyGridFileReader(HourlyGridFileReaderMethods,
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
+                                   ProvenanceManagerMethods,
                                    GridFileManagerMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -384,15 +368,6 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def provenanceGenerator(self, prov_path):
-        key = self.getDatasetAttribute(prov_path, 'generator',
-                   self.getDatasetAttribute(prov_path, 'provenance',
-                        'default'))
-        return self._provenance_generators.get(prov_path,
-                                           self._provenance_generators[key])
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
     def refreshDataset(self, dataset_path, start_time, data, **kwargs):
         """
         CAUTION: The 'refreshDataset' function DOES NOT UPDATE THE
@@ -406,11 +381,6 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
         if kwargs.get('update_provenance', False):
             prov_path = kwargs.get('provenance_path', 'provenance')
             self.updateProvenance(prov_path, start_time, data, **kwargs)
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def registerProvenanceGenerator(self, key, generator):
-        self._provenance_generators[key] = generator
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -648,16 +618,14 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
     # private methods
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _loadProvenanceGenerators_(self):
-        self._provenance_generators = {
-            'default':timeStampProvenanceGenerator,
-            'timeaccum':timeAccumStatsProvenanceGenerator,
-            'timestamp':timeStampProvenanceGenerator,
-            'timestats':timeStatsProvenanceGenerator,
-        }
+    def _initHourlyFileManager_(self):
+        self.initProvenanceConfig()
+        self.updateProvenanceConfig(PROVENANCE)
 
-    def _preInitHourlyFileManager_(self, **kwargs):
-        self._preInitHourlyFileReader_(**kwargs)
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _preInitHourlyFileManager_(self, kwarg_dict):
+        self._preInitHourlyFileReader_(kwarg_dict)
         self._unpackers = { }
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -666,7 +634,7 @@ class HourlyGridFileManager(HourlyGridFileManagerMethods,
                             Hdf5HourlyGridFileManager):
 
     def __init__(self, hdf5_filepath, mode='r', **kwargs):
-        self._preInitHourlyFileManager_()
+        self._preInitHourlyFileManager_(kwargs)
         Hdf5HourlyGridFileManager.__init__(self, hdf5_filepath, mode)
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
@@ -674,6 +642,6 @@ class HourlyGridFileManager(HourlyGridFileManagerMethods,
     def _loadManagerAttributes_(self):
         Hdf5HourlyGridFileManager._loadManagerAttributes_(self)
         self._loadHourGridAttributes_()
-        self._loadProvenanceGenerators_()
+        self._initHourlyFileManager_()
 
 

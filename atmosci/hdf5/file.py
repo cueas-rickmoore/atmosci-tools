@@ -37,7 +37,6 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
             self._access_authority = ('r',)
             self._open_(hdf5_filepath, 'r')
 
-
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # properties - access to protected and private attributes
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -171,7 +170,7 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
             return dataset_path in self._dataset_names
         else:
             self.assertFileOpen()
-            return datast_name in self._getDatasetKeys_(parent_name)
+            return dataset_path in self.listObjectsIn(parent_name)
 
     def datasetHasAttribute(self, dataset_path, attr_name):
         self.assertFileOpen()
@@ -264,6 +263,14 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         if self.file is None:
             self._open_(self.filepath, mode)
 
+    def setFilepath(self, new_filepath):
+        if self.__hdf5_file is None:
+            self.__hdf5_filepath = new_filepath
+        else:
+            errmsg = 'Cannot change file path while the a file is open.'
+            errmsg += '\nCurrently open file is : "%s"' 
+            raise IOError, errmsg % self.__hdf5_filepath
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def group(self, group_name):
@@ -350,7 +357,7 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
     def listObjectsIn(self, parent_name=None):
         self.assertFileOpen()
         if parent_name == '__file__': _object = self.file
-        else: _object = self.getObject(self.file, parent_name)
+        else: _object = self.getObject(parent_name)
         return list(self.dotPaths(self._getObjectKeys_(_object)))
 
     def objectHasAttribute(self, object_name, attr_name):

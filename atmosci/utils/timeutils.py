@@ -52,6 +52,16 @@ def elapsedTime(start_time, as_string=False):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+def diffInHours(time_one, time_two, inclusive=False):
+    if time_one > time_two:
+        diff = time_one - time_two
+    else: diff = time_two - time_one
+    hours = (diff.days * 24) + (diff.seconds / 3600)
+    if inclusive: return hours + 1
+    return hours
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 def isDaylightSavingsTime(date, timezone='US/Eastern'):
     tz = pytz.timezone(timezone)
     if isinstance(date, datetime.datetime): test_date = date

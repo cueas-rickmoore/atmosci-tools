@@ -326,15 +326,16 @@ class PathConstructionMethods:
             subdir = source.get('subdir', None)
             if subdir is not None:
                 return self.normalizeDirpath(subdir)
-            else: return self.normalizeDirpath(source.name.lower())
+            else:
+                name = source.get('tag', source.name)
+                return self.normalizeDirpath(name.lower())
         return self.normalizeDirpath(source.lower())
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def sourceToFilepath(self, source):
         if isinstance(source, ConfigObject):
-            path = source.get('tag', None)
-            if path is None: path = source.name.upper()
+            path = source.get('tag', source.name.upper())
         else: path = source.upper()
         return path.replace(' ','-').replace('_','-').replace('.','-')
 

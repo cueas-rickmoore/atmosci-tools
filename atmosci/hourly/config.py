@@ -16,6 +16,7 @@ del COMMON
 CONFIG.datasets.timegrid = { 'chunk_type':('time','gzip'), 
                 'dtype':float,
                 'dtype_packed':float,
+                'frequency':1,
                 'missing_data':N.nan,
                 'missing_packed':N.nan, 
                 'period':'hour',
@@ -62,45 +63,6 @@ CONFIG.groups = {
     },
     'teststats': { 'description':'Data stats group',
                    'datasets':('test','provenance:timestats')
-    },
-}
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# configure provenance type defintions
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-CONFIG.provenance = {'views':{ 'hour':('hour','time'), 'time':('time','hour')}}
-CONFIG.provenance.types = {
-    # statistics for time series accumulation 
-    'timeaccum': {
-        'empty':('',N.nan,N.nan,N.nan,N.nan,N.nan,N.nan,N.nan,N.nan,'',''),
-        'formats':[
-            '|S14','f4','f4','f4','f4','f4','f4','f4','f4','|S20','|S12'
-            ],
-        'names':['time','min','max','mean','median', 'min accum','max accum',
-                 'mean accum','median accum','processed','source'],
-        'period':'hour',
-        'scope':'time',
-        'type':'timeaccum'
-    },
-
-    # simple source time stamp
-    'timestamp':{
-        'empty':('','',''),
-        'formats':['|S10','|S20','|S12'],
-        'names':['time','processed','source'],
-        'period':'hour',
-        'scope':'time',
-        'type':'timestamp'
-    },
-
-    # simple time series statistics
-    'timestats':{
-        'empty':('',N.nan,N.nan,N.nan,N.nan,'',''),
-        'formats':['|S14','f4','f4','f4','f4','|S20','|S12'],
-        'names':['time','min','max','mean','median','processed','source'],
-        'period':'hour',
-        'scope':'time',
-        'type':'timestats'
     },
 }
 

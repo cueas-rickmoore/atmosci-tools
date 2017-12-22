@@ -7,8 +7,13 @@ import h5py
 from atmosci.utils import tzutils
 
 from atmosci.hourly.grid import HourlyGridFileManager
-from atmosci.seasonal.methods.builder import ProvenanceBuilderMethods
 
+from atmosci.seasonal.methods.provenance import ProvenanceBuilderMethods
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+from atmosci.hourly.prov_config import PROVENANCE
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -141,7 +146,7 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def preInitBuilder(self, config, filetype, region, source, timezone,
-                             **kwargs):
+                             kwarg_dict):
         """
         Set builder instance attributes that are required before
         BASCLASS__init__ is called.
@@ -151,16 +156,14 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
         config: instance of atmosci.utis.confing.ConfigObject that
                 has definitions of the data groups and data sets
                 to be built.
-        start_time: an instance of datetime.datetime describing the
-                    first day and hour available in this file.
-                    start_time MUST already be localized using
-                    atmosci.tzutils.asHourInTimezone(). It does not 
-                    have to be the same one as was passed in timezone.
+        filetype: key for looking up instructions for building the file. 
+        region: key for region covered by the file. 
+        source: source configuration key for attributes used to build
+                gridded datasets in the file.
         timezone: the timezone used for dates/times saved in this
                   file may either be a timezone object created using
                   atmosci.tzutils.asTimezoneObj(), or a string
                   containing a compatible name for the timezone.
-        regions: the name of region covered by yhe file. 
 
         IMPORTANT: either end_time or num_hours must be specified
                    in kwargs
@@ -178,10 +181,11 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
               after start_time. e.g. 2017-01-01:01 and num_bours = 10
               will set end_time to 2017-01-01:10
         """
-        self._preInitHourlyFileBuilder_(timezone, **kwargs)
+        self._preInitHourlyFileBuilder_(timezone, kwarg_dict)
+        kwarg_dict['prov_config'] = PROVENANCE
         ProvenanceBuilderMethods.preInitBuilder(self, config, filetype,
-                                 source, region, **kwargs)
-    
+                                 source, region, kwarg_dict)
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def additionalFileAttributes(self, **kwargs):
@@ -200,21 +204,20 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
     
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def generateEmptyProvenance(self, prov_config, attrs):
+    def generateEmptyProvenance(self, prov_type, attrs):
         start_time = attrs.get('start_time', self.start_time) 
         end_time = attrs.get('end_time', self.end_time)
-        timezone = prov_config.get('timezone',
-                               attrs.get('timezone', self.default_timezone))
+        timezone = attrs.get('timezone', self.fileAttribute('timezone'))
         hour = tzutils.asHourInTimezone(start_time, timezone)
         end_time = tzutils.asHourInTimezone(end_time, timezone)
+        time_increment = datetime.timedelta(hours=prov_type.get('frequency',1))
 
         records = [ ]
-        record_tail = prov_config.empty[1:]
-        one_hour = datetime.timedelta(hours=1)
+        record_tail = prov_type.empty[1:]
         while hour <= end_time:
             record = (tzutils.hourAsString(hour),) + record_tail
             records.append(record)
-            hour += one_hour
+            hour += time_increment
         return records
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -222,6 +225,8 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _additionalPreBuildInit(self, **kwargs):
+        self.updateProvenanceConfig(PROVENANCE)
+
         times_missing = 'Neither "start_time" nor "end_time" were found in'
         times_missing += ' **kwargs. One of them MUST be specified.'
         hours_mising = '"num_hours" must be passed via **kwargs when only' 
@@ -261,7 +266,9 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
                 if dim == 'time':
                     period = dataset.get('period','hour')
                     if period in ('hour','hours'):
-                        shape.append(self.num_hours)
+                        frequency = dataset.get('frequency',1)
+                        if frequency == 1: shape.append(self.num_hours)
+                        else: shape.append((self.num_hours/frequency) + 1)
                     else:
                         errmsg = '"%s" is an unsupported time period.'
                         raise ValueError, errmsg % period
@@ -277,36 +284,74 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _resolveProvenanceBuildAttributes(self, prov_config, **kwargs):
-        attrs = self._resolveCommonAttributes(**kwargs)
-        attrs['description'] = prov_config.get('description', None)
-        attrs['key'] = prov_config.name
-        view = prov_config.names[0]
-        attrs.update(self._resolveScopeAttributes(prov_config, **kwargs))
-        attrs.update(self._resolveTimeAttributes(prov_config, **kwargs))
-        attrs['generator'] = \
-            kwargs.get('generator', prov_config.get('generator', attrs['key']))
+    def _resolveHourlyAttributes(self, object_config, kwarg_dict):
+        attrs = {
+          'period':kwarg_dict.get('period',object_config.get('period','hour')),
+        }
+        attrs['frequency'] = frequency = \
+             kwarg_dict.get('frequency',object_config.get('frequency',1))
+        # dataset timezone attribute must be a string
+        timezone = str(kwarg_dict.get('timezone',
+                       object_config.get('timezone', self.timezone)))
+        attrs['timezone'] = timezone
+
+        # add object's time span
+        start_time = kwarg_dict.get('start_time', self.start_time)
+        start_time = tzutils.asHourInTimezone(start_time, timezone)
+        attrs['start_time'] = tzutils.hourAsString(start_time)
+
+        end_time = kwarg_dict.get('end_time', self.end_time)
+        end_time = tzutils.asHourInTimezone(end_time, timezone)
+        attrs['end_time'] = tzutils.hourAsString(end_time)
+
+        num_hours = tzutils.hoursInTimespan(start_time, end_time)
+        attrs['num_hours'] = (num_hours / frequency) + 1
+        
+        # object may or may not have a reference time
+        reference_time = kwarg_dict.get('reference_time', None)
+        if reference_time is not None: # and reference_time != start_time:
+            reference_time = tzutils.asHourInTimezone(reference_time, timezone)
+            attrs['reference_time'] = tzutils.hourAsString(reference_time)
+
         return attrs
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _resolveScopeAttributes(self, object_config, **kwargs):
+    def _resolveProvenanceBuildAttributes(self, prov_config, kwarg_dict):
+        attrs = self._resolveCommonAttributes(**kwarg_dict)
+        attrs['description'] = prov_config.get('description', None)
+        attrs['key'] = prov_config.name
+        view = prov_config.names[0]
+        attrs.update(self._resolveScopeAttrs(prov_config, **kwarg_dict))
+        attrs.update(self._resolveTimeAttributes(prov_config, **kwarg_dict))
+        attrs['generator'] = kwarg_dict.get('generator', 
+                                  prov_config.get('generator', attrs['key']))
+        return attrs
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _resolveScopeAttrs(self, object_config, **kwarg_dict):
         attrs = { }
-        scope = kwargs.get('scope', object_config.get('scope',None))
+        scope = kwarg_dict.get('scope', object_config.get('scope',None))
         if scope is not None:
             attrs['scope'] = scope
-            period = kwargs.get('period', object_config.get('period', 'hour'))
-            attrs['period'] = period
+            if scope == 'time':
+                perd = kwarg_dict.get('period',
+                                  object_config.get('period','hour'))
+            else: perd = kwarg_dict.get('period',
+                                    object_config.get('period',None))
+            if perd is not None:
+                attrs['period'] = perd
         return attrs
  
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _resolveSourceAttributes(self, **kwargs):
+        attrs = { }
         source = self.source
-        attrs = { 'source': kwargs.get('source_tag',
-                                   source.get('tag', source.name)),
-                }
-
+        attrs['source'] = kwargs.get('source_tag',
+                                 source.get('tag', source.name))
+        # check for one of NRCC's ACIS grids
         acis_grid = source.get('acis_grid', None)
         if acis_grid is not None:
             attrs['acis_grid'] = acis_grid
@@ -329,37 +374,18 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _resolveTimeAttributes(self, object_config, **kwargs):
-        attrs = { }
-        scope = kwargs.get('scope', object_config.get('scope', None))
+    def _resolveTimeAttributes(self, object_config, **kwarg_dict):
+        scope = kwarg_dict.get('scope', object_config.get('scope', None))
         # cannot be a time dataset without scope == time
-        if scope is None or scope != 'time': return attrs
-
-        period = kwargs.get('period', object_config.get('period', 'hour'))
-        attrs['period'] = period
-
-        timezone = kwargs.get('timezone',
-                          object_config.get('timezone', self.default_timezone))
-        # dataset timezone attribute must be a string
-        attrs['timezone'] = str(timezone)
-
-        start_time = kwargs.get('start_time', self.start_time)
-        start_time = tzutils.asHourInTimezone(start_time, timezone)
-        attrs['start_time'] = tzutils.hourAsString(start_time)
-
-        end_time = kwargs.get('end_time', self.end_time)
-        end_time = tzutils.asHourInTimezone(end_time, timezone)
-        attrs['end_time'] = tzutils.hourAsString(end_time)
-        
-        reference_time = kwargs.get('reference_time', None)
-        if reference_time is not None: # and reference_time != start_time:
-            reference_time = tzutils.asHourInTimezone(reference_time, timezone)
-            attrs['reference_time'] = tzutils.hourAsString(reference_time)
-
-        num_hours = tzutils.hoursInTimespan(start_time, end_time)
-        attrs['num_hours'] = num_hours
-
-        return attrs
+        if scope == 'time':
+            return self._resolveHourlyAttributes(object_config, kwarg_dict)
+        else:
+            period = kwarg_dict.get('period',object_config.get('period',None))
+            if period == 'date':
+                return self._resolveDateAttributes(dataset_config, **kwarg_dict)
+            elif period == 'doy':
+                return self._resolveDoyAttributes(dataset_config, **kwarg_dict)
+        return { }
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -378,8 +404,8 @@ class HourlyGridBuilderMethods(ProvenanceBuilderMethods):
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
-    def _preInitHourlyFileBuilder_(self, timezone, **kwargs):
-        self._preInitHourlyFileManager_(**kwargs)
+    def _preInitHourlyFileBuilder_(self, timezone, kwarg_dict):
+        self._preInitHourlyFileManager_(kwarg_dict)
         if tzutils.isValidTimezoneObj(timezone):
             self.timezone = tzutils.timezoneAsString(timezone)
             self.tzinfo = timezone

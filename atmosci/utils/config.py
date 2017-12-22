@@ -88,7 +88,7 @@ class ConfigMap(dict):
 class ConfigObject(object):
 
     def __init__(self, name, parent, *children, **kwargs):
-        if '.' in name:
+        if isinstance(name, basestring) and '.' in name:
             errmsg = 'Trying to create instance of ConfigObject with name = "%s"'
             errmsg += '\nDotted paths cannot be used as a name for ConfigObjects'
             raise ValueError, errmsg % name
@@ -552,7 +552,9 @@ class ConfigObject(object):
             raise TypeError, errmsg % type(path)
 
     def _proper_name_(self, name):
-        return name.replace('_',' ').title()
+        if isinstance(name, basestring):
+            return name.replace('_',' ').title()
+        else: return str(name)
 
     def _set_name_(self, new_name):
         self.__dict__['name'] = new_name

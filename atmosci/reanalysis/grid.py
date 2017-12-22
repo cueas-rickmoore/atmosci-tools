@@ -7,33 +7,20 @@ import numpy as N
 from atmosci.utils.config import ConfigObject
 from atmosci.utils import tzutils
 
-from atmosci.hdf5.hourgrid import Hdf5HourlyGridFileReader, \
-                                  Hdf5HourlyGridFileManager
-
-from atmosci.hourly.grid import HourlyGridFileReaderMethods, \
-                                HourlyGridFileManagerMethods
+from atmosci.hourly.grid import HourlyGridFileReader, \
+                                HourlyGridFileManager
 from atmosci.hourly.builder import HourlyGridBuilderMethods
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class ReanalysisGridFileReader(HourlyGridFileReaderMethods,
-                               Hdf5HourlyGridFileReader):
-
-    def __init__(self, hdf5_filepath):
-        self._preInitHourlyFileReader_()
-        Hdf5HourlyGridFileReader.__init__(self, hdf5_filepath)
-
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-
-    def _loadManagerAttributes_(self):
-        Hdf5HourlyGridFileReader._loadManagerAttributes_(self)
-        self._loadHourGridAttributes_()
+class ReanalysisGridFileReader(HourlyGridFileReader):
+    pass
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class ReanalysisGridFileManagerMethods(HourlyGridFileManagerMethods):
+class ReanalysisGridFileManagerMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -354,19 +341,17 @@ class ReanalysisGridFileManagerMethods(HourlyGridFileManagerMethods):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class ReanalysisGridFileManager(ReanalysisGridFileManagerMethods,
-                                Hdf5HourlyGridFileManager):
+                                HourlyGridFileManager):
 
     def __init__(self, hdf5_filepath, mode='r', **kwargs):
-        self._preInitHourlyFileManager_()
-        Hdf5HourlyGridFileManager.__init__(self, hdf5_filepath, mode)
+        HourlyGridFileManager.__init__(self, hdf5_filepath, mode)
         self._initDataProcessors_(**kwargs)
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
     def _loadManagerAttributes_(self):
-        Hdf5HourlyGridFileManager._loadManagerAttributes_(self)
+        HourlyGridFileManager._loadManagerAttributes_(self)
         self._loadHourGridAttributes_()
-        self._loadProvenanceGenerators_()
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -378,10 +363,10 @@ class ReanalysisGridFileBuilder(HourlyGridBuilderMethods,
     """
     def __init__(self, hdf5_filepath, config, filetype, region, source,
                        reference_time, timezone, lons=None, lats=None,
-                       **kwargs):
+                       kwarg_dict={}):
         self.preInitBuilder(config, filetype, region, source, reference_time,
-                            timezone, **kwargs)
-        mode = kwargs.get('mode', 'w')
+                            timezone, kwarg_dict)
+        mode = kwarg_dict.get('mode', 'w')
         if mode == 'w':
             self.load_manager_attrs = False
         else: self.load_manager_attrs = True
@@ -395,14 +380,14 @@ class ReanalysisGridFileBuilder(HourlyGridBuilderMethods,
         self.open(mode='a')
         # build lat/lon datasets if they were passed
         if lons is not None:
-            self.initLonLatData(lons, lats, **kwargs)
+            self.initLonLatData(lons, lats, **kwarg_dict)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def preInitBuilder(self, config, filetype, region, source, reference_time,
-                             timezone, **kwargs):
+                             timezone, kwarg_dict={}):
         HourlyGridBuilderMethods.preInitBuilder(self, config, filetype,
-                                 region, source, timezone, **kwargs)
+                                 region, source, timezone, kwarg_dict)
         self.reference_time = reference_time
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -460,6 +445,5 @@ class ReanalysisGridFileBuilder(HourlyGridBuilderMethods,
         if self.load_manager_attrs:
             ReanalysisGridFileManager._loadManagerAttributes_(self)
         else:
-            self._loadProvenanceGenerators_()
             self.time_attr_cache = { }
 

@@ -342,6 +342,19 @@ def asUtcTime(datetime_obj, local_timezone=None):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+def asUTCTime(datetime_obj, local_timezone=None):
+    if type(datetime_obj.tzinfo) == type(pytz.UTC):
+        return datetime_obj
+    utc = pytz.timezone('UTC')
+    if isinstance(datetime_obj.tzinfo, pytz.tzinfo.BaseTzInfo):
+        return datetime_obj.astimezone(utc)
+    if local_timezone in ('UTC', utc, None):
+        return utc.localize(datetime_obj)
+    local_tzinfo = asTzinfo(local_timezone)
+    return local_tzinfo.localize(datetime_obj).astimezone(utc)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 def asUtcHour(datetime_obj, local_timezone=None):
     return hourFromDatetime(asUtcTime(datetime_obj, local_timezone))
 

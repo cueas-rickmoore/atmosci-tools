@@ -178,6 +178,26 @@ class TimeGridFileReaderMethods(GridFileReaderMethods):
     # start/end time indexes
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def _timeToIndex(self, dataset_path, time_obj):
+        period = self.getDatasetAttribute(dataset_path, 'period', None)
+        if period is not None:
+            if period == 'doy':
+                return self._doyToIndex(dataset_path, time_obj)
+            elif period in ('date','day'):
+                return self._dateToIndex(dataset_path, time_obj)
+            elif period == 'year':
+                return self._yearToIndex(dataset_path, time_obj)
+            else:
+                errmsg = '%s does not support indexing by "%s"'
+                class_name = self.__class__.__name__
+                raise AttributeError, errmsg % (class_name, period)
+        else:
+            errmsg = '"%s" dataset is not indexable by time.'
+            errmsg += ' It does not have a "period" attribute.'
+            raise IndexError, errmsg % dataset_path
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def _timesToIndexes(self, dataset_path, start_time_obj, end_time_obj):
         period = self.getDatasetAttribute(dataset_path, 'period', None)
         if period is not None:
@@ -613,6 +633,7 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
         provenance = N.rec.fromrecords(records, shape=(num_days,),
                            formats=list(formats), names=list(names))
         dataset[start_index:end_index] = provenance
+        dataset.attrs['updated'] = self.timestamp
         return num_days
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -657,6 +678,7 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
         provenance = N.rec.fromrecords(records, shape=(num_days,),
                            formats=list(formats), names=list(names))
         dataset[start_index:end_index] = provenance
+        dataset.attrs['updated'] = self.timestamp
 
         return prov_path, num_days
 
@@ -951,27 +973,6 @@ class TimeGridFileManagerMethods(TimeGridFileReaderMethods,
             errmsg = '"%s" dataset is not indexable by time.'
             errmsg += ' It does not have a "period" attribute.'
             raise IndexError, errmsg % dataset_path
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _timeToIndex(self, dataset_path, time_obj):
-        period = self.getDatasetAttribute(dataset_path, 'period', None)
-        if period is not None:
-            if period == 'doy':
-                return self._doyToIndex(dataset_path, time_obj)
-            elif period in ('date','day'):
-                return self._dateToIndex(dataset_path, time_obj)
-            elif period == 'year':
-                return self._yearToIndex(dataset_path, time_obj)
-            else:
-                errmsg = '%s does not support indexing by "%s"'
-                class_name = self.__class__.__name__
-                raise AttributeError, errmsg % (class_name, period)
-        else:
-            errmsg = '"%s" dataset is not indexable by time.'
-            errmsg += ' It does not have a "period" attribute.'
-            raise IndexError, errmsg % dataset_path
-
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     #

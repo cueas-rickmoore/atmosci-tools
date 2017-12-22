@@ -31,6 +31,9 @@ class SeasonalConfig(ConfigObject):
 CFGBASE = SeasonalConfig('seasonal_config', None)
 COMMON = SeasonalConfig('seasonal_config', None)
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# basic atmosci package configuration
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 from atmosci.config import ATMOSCFG
 # import any default directory paths
 ATMOSCFG.dirpaths.copy('dirpaths', COMMON)
@@ -42,6 +45,13 @@ CFGBASE.link(COMMON.regions)
 ATMOSCFG.modes.copy('modes', COMMON)
 CFGBASE.link(COMMON.modes)
 del ATMOSCFG
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# provenance dataset configurations
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+from atmosci.seasonal.prov_config import PROVENANCE
+CFGBASE.link(PROVENANCE)
+COMMON.link(PROVENANCE)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # default project configuration
@@ -268,67 +278,6 @@ CFGBASE.groups.mint = { 'description':'Minimum daily temperature',
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# provenance dataset configuration
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-PROVENANCE = ConfigObject('provenance', CFGBASE, 'generators', 'types', 'views')
-ConfigObject('provenance', COMMON)
-
-
-# provenance time series views
-CFGBASE.provenance.views.date = ('date','obs_date')
-CFGBASE.provenance.views.doy = ('day','doy')
-
-# configure provenance type defintions
-# statistics for time series data with accumulation
-accum = { 'empty':('',N.nan,N.nan,N.nan,N.nan,N.nan,N.nan,N.nan,N.nan,''),
-          'formats':['|S10','f4','f4','f4','f4','f4','f4','f4','f4','|S20'],
-          'names':['time','min','max','mean','median', 'min accum','max accum',
-                   'mean accum','median accum','processed'],
-          'type':'cumstats' }
-# date series - data with accumulation
-CFGBASE.provenance.types.dateaccum = copy.deepcopy(accum)
-CFGBASE.provenance.types.dateaccum.names[0] = 'date'
-CFGBASE.provenance.types.dateaccum.period = 'date'
-# day of year series - data with accumulation
-CFGBASE.provenance.types.doyaccum = copy.deepcopy(accum)
-CFGBASE.provenance.types.doyaccum.formats[0] = '<i2'
-CFGBASE.provenance.types.doyaccum.names[0] = 'doy'
-CFGBASE.provenance.types.doyaccum.period = 'doy'
-
-# provenance for time series statistics only
-stats = { 'empty':('',N.nan,N.nan,N.nan,N.nan,''),
-          'formats':['|S10','f4','f4','f4','f4','|S20'],
-          'names':['time','min','max','mean','median','processed'],
-          'type':'stats' }
-# date series stats
-CFGBASE.provenance.types.datestats = copy.deepcopy(stats)
-CFGBASE.provenance.types.datestats.names[0] = 'date'
-CFGBASE.provenance.types.datestats.period = 'date'
-# day of year series stats
-CFGBASE.provenance.types.doystats = copy.deepcopy(stats) 
-CFGBASE.provenance.types.doystats.formats[0] = '<i2'
-CFGBASE.provenance.types.doystats.names[0] = 'doy'
-CFGBASE.provenance.types.doystats.period = 'doy'
-
-# time series observations
-observed = { 'empty':('',N.nan,N.nan,N.nan,N.nan,''),
-             'formats':['|S10','f4','f4','f4','f4','|S20'],
-             'names':['time','min','max','avg','median','dowmload'],
-             'type':'stats' }
-CFGBASE.provenance.types.observed = copy.deepcopy(observed)
-CFGBASE.provenance.types.observed.names[0] = 'date'
-CFGBASE.provenance.types.observed.period = 'date'
-
-# temperature extremes group provenance
-CFGBASE.provenance.types.tempexts = \
-        { 'empty':('',N.nan,N.nan,N.nan,N.nan,N.nan,N.nan,'',''),
-          'formats':['|S10','f4','f4','f4','f4','f4','f4','|S20','|S20'],
-          'names':['date','min mint','max mint','avg mint','min maxt',
-                   'max maxt','avg maxt','source','processed'],
-          'period':'date', 'scope':'year', 'type':'tempexts' }
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # data sources
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('sources', CFGBASE)
@@ -397,6 +346,10 @@ COMMON.static.prism = { 'type':'prism5k', 'tag':'PRISM',
               }
 CFGBASE.static.link(COMMON.static.prism)
 
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# sub-directory hooks
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ConfigObject('subdir_paths', CFGBASE)
 ConfigObject('subdir_paths', COMMON)
 

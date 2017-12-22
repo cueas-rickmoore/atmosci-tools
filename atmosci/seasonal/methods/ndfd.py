@@ -99,23 +99,37 @@ class NDFDFactoryMethods:
     # forecast directory & data file path
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def forecastDownloadDir(self, fcast_date):
+    def forecastDownloadDir(self, fcast_date, **kwargs):
         # determine root directory of forecast tree
-        if self.project.shared_forecast:
-            fcast_dir = os.path.join(self.sharedRootDir(), 'forecast')
-        else:
-            fcast_dir = self.config.dirpaths.get('forecast', default=None)
-            if fcast_dir is None:
-                fcast_dir = os.path.join(self.projectRootDir(), 'forecast')
+        fcast_dir = self.config.dirpaths.get('ndfd',
+                         self.config.dirpaths.get('forecast', default=None))
+        if fcast_dir is None:
+            if self.project.shared_forecast:
+                fcast_dir = self.sharedRootDir()
+            else: fcast_dir = self.projectRootDir()
+
         # add subdirectory for forecast source
-        download_dir = \
-            os.path.join(fcast_dir, self.sourceToDirpath(self.ndfd_config))
-        # add subdirectory for forecast date
-        download_dir = \
-            os.path.join(download_dir, self.timeToDirpath(fcast_date))
+        subdirs = self.forecastSubdirPath(fcast_date, **kwargs)
+
+        download_dir = os.path.join(fcast_dir, subdir_path)
         # make sure directory exists before return
         if not os.path.exists(download_dir): os.makedirs(download_dir)
         return download_dir
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def forecastSubdirPath(self, fcast_date, **kwargs):
+        template = self.ndfd.grib.subdirs
+        if isinstance(template, tuple): template = os.sep.join(template)
+
+        region = kwargs.get('region', self.ndfd.grib.region)
+        source = kwargs.get('source', self.ndfd_config)
+        template_args = { 'date': self.timeToDirpath(fcast_date),
+                          'region': self.regionToDirpath(region),
+                          'source': self.sourceToDirpath(source),
+                          'year': fcast_date.year,
+                        }
+        return template % template_args
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

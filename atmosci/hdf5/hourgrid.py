@@ -334,7 +334,7 @@ class Hdf5HourlyGridReaderMethods(TimeZoneManagementMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def indexForTime(self, dataset_path, hour, **kwargs):
+    def indexForTime(self, dataset_path, hour, exact=True, **kwargs):
         """
         Calculate the index of a particular hour relative to the
         start time associated with the dataset.
@@ -345,6 +345,11 @@ class Hdf5HourlyGridReaderMethods(TimeZoneManagementMethods):
             hour: datetime.datetime object, string of the form
                   YYYY-MM-DD:HH or an integer number of hours
                   after the first hour in the dataset.
+            exact: boolean, Used only when hourly frequency > 1.
+                   Default == True, an Exception is thrown when
+                   the requested hour is not an exact match an hour
+                   in the dataset. when set to False, data for the
+                   hour closest to the requested hour is returned.
 
             NOTE: a datetime object may include a tzinfo attribute
                   created using atmosci.tzutils.asHourInTimezone()
@@ -355,8 +360,8 @@ class Hdf5HourlyGridReaderMethods(TimeZoneManagementMethods):
                   tzinfo attribute is passed, "timezone" may be
                   passed in kwargs to define the timezone.
                   Otherwise the default timezone ('US/Eastern')
-                  will be used. The default can be changed
-                  using this class' setDefaultTimezone() method.
+                  will be used. The default can be changed using
+                  the instance's setDefaultTimezone() method.
 
         Returns:
         -------
@@ -373,13 +378,32 @@ class Hdf5HourlyGridReaderMethods(TimeZoneManagementMethods):
         end_time = self.timeAttribute(dataset_path, 'end_time', self.end_time)
 
         if tzhour >= start_time and tzhour <= end_time:
-            return tzutils.timeDifferenceInHours(tzhour, start_time)
+            frequency = self.datasetAttribute(dataset_path, 'frequency', 1)
+            diff = tzutils.timeDifferenceInHours(tzhour, start_time)
+            if frequency == 1: return diff
+            else:
+                index = diff / frequency
+                mod = diff % frequency
+                # always return an exact match
+                if mod == 0: return index
+                # raise exception when hour must exactly match a dataset hour
+                if exact:
+                    msg_args = (tzutils.hourAsString(hour), diff, frequency,
+                                dataset_path)
+                    errmsg = '%s (hour %d) is not a multiple of the hourly'
+                    errmsg += ' frequency (%d) in the "%s" dataset.\nPass False'
+                    errmsg += ' in "exact" arg to get data for closest hour.'
+                    raise ValueError, errmsg % msg_args
+                # "exact" is False - return index for closest hour
+                else:
+                    if mod <= frequency / 2.: return index
+                    else: return index + 1
         else:
-            time_str = tzutils.hourAsString(hour)
-            errmsg = '%s is outside the valid range of hours' % time_str
-            errmsg = '%s (%%s to %%s) for "%%s" dataset' % errmsg
-            errmsg = errmsg % (str(start_time), str(end_time), dataset_path)
-            raise ValueError, errmsg
+            msg_args = (str(hour), tzutils.hourAsString(hour), str(start_time),
+                        str(end_time), dataset_path)
+            errmsg = '%s (%s) is outside the valid range of hours\n'
+            errmsg += '(%s to %s) for the "%s" dataset.'
+            raise ValueError, errmsg % msg_args
     indexForHour = indexForTime
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -783,12 +807,15 @@ class Hdf5HourlyGridReaderMethods(TimeZoneManagementMethods):
         timezone = self.fileAttribute('timezone', None)
         if timezone is not None:
             self.timezone = timezone
-            self.tzinfo = tzinfo = tzutils.asTimezoneObj(timezone)
+        elif hasattr(self, 'timezone'):
+            timezone = self.timezone
         else:
             errmsg = 'Hour-based time files must have a "timezone" attribute. '
             errmsg += 'Indexing will not function properly for cross-timezone '
             errmsg += 'retrievals.'
             raise KeyError, errmsg
+            
+        self.tzinfo = tzinfo = tzutils.asTimezoneObj(timezone)
 
         self.default_timezone = DEFAULT_TZINFO
         start_time = self.fileAttribute('start_time', None)
@@ -978,6 +1005,12 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
         tz = self.objectAttribute(object_path, 'timezone', self.timezone)
         time_obj = tzutils.asHourInTimezone(hour, tz)
         self._cacheTimeAttr(object_path, attr_name, time_obj)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def setTimeAttributes(self, object_path, **kwargs):
+        for attr_name, hour in kwargs.items():
+            self.setTimeAttribute(object_path, attr_name, hour)
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 

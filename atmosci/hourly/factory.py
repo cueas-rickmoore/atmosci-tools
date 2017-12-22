@@ -29,17 +29,41 @@ class HourlyGridFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def hourlyGridFilename(self, target_hour, filetype, source, region,
+    def hourlyGridDirpath(self, filetype, target_hour, source, region,
+                                **kwargs):
+        root_dir = self.hourlyGridRootDir(filetype, **kwargs)
+        template = self.anal_config.grid_subdir
+        if isinstance(subdir, tuple): template = os.sep.join(template)
+
+        if 'utc' in template:
+            template_args = tzutils.utcTimeStrings(target_hour)
+        else: template_args = self.timeToFilepath(target_hour)
+
+        template_args.update(self.pathTemplateArgs(filetype, source, region))
+        dirpath = os.path.join(root_dir, template % arg_dict) 
+        if not os.path.exists(dirpath):
+            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
+                errmsg = 'Hourly grid directory does not exist :\n%s'
+                raise IOError, errmsg % dirpath
+            else: os.makedirs(dirpath)
+        return dirpath
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def hourlyGridFilename(self, filetype, target_hour, source, region,
                                  **kwargs):
         template = self.gridFilenameTemplate(filetype)
-        template_args = \
-                self.templateArgs(target_hour, filetype, source, region)
+        if 'utc' in template:
+            template_args = tzutils.utcTimeStrings(target_hour)
+        else: template_args = self.timeToFilepath(target_hour)
+
+        template_args.update(self.pathTemplateArgs(filetype, source, region))
         if kwargs: template_args.update(dict(kwargs))
         return template % template_args
  
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def hourlyGridFilepath(self, target_hour, filetype, source, region,
+    def hourlyGridFilepath(self, filetype, target_hour, source, region,
                                  **kwargs):
         filepath = kwargs.get('filepath', None)
         if filepath is not None: return filepath
@@ -54,28 +78,10 @@ class HourlyGridFactoryMethods:
                 errmsg = 'Hourly grid file does not exist :\n    %s'
                 raise IOError, errmsg % filepath
         return filepath
- 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def hourlyGridDirpath(self, target_hour, filetype, source, region,
-                                **kwargs):
-        root_dir = self.hourlyGridRootDir(filetype, **kwargs)
-        subdir = self.anal_config.grid_subdir
-        if isinstance(subdir, tuple): subdir = os.path.join(*subdir)
-        arg_dict = self.utcTimes(target_hour)
-        arg_dict['region'] = self.regionToDirpath(region) 
-        arg_dict['source'] = self.sourceToDirpath(source) 
-        root_dir = os.path.join(root_dir, subdir) % arg_dict
-        if not os.path.exists(root_dir):
-            if kwargs.get('dir_must_exist',kwargs.get('file_must_exist',False)):
-                errmsg = 'Hourly grid directory does not exist :\n%s'
-                raise IOError, errmsg % root_dir
-            else: os.makedirs(root_dir)
-        return root_dir
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def hourlyGridFileManager(self, target_hour, filetype, source, region,
+    def hourlyGridFileManager(self, filetype,  target_hour,source, region,
                                     **kwargs):
         filepath =  self.hourlyGridFilepath(target_hour, filetype, source,
                                             region, **kwargs)
@@ -86,7 +92,7 @@ class HourlyGridFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def hourlyGridFileReader(self, target_hour, filetype, source, region,
+    def hourlyGridFileReader(self, filetype, target_hour, source, region,
                                    **kwargs):
         filepath =  self.hourlyGridFilepath(target_hour, filetype, source,
                                             region, **kwargs)
@@ -109,14 +115,27 @@ class HourlyGridFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def templateArgs(self, target_hour, filetype, source, region):
-        template_args = tzutils.utcTimeStrings(target_hour)
-        template_args['filetype'] = filetype
+    def pathTemplateArgs(self, filetype, source, region):
+        template_args = { 'filetype':filetype, }
         if region is not None:
             template_args['region'] = self.regionToFilepath(region)
         if source is not None:
             template_args['source'] = self.sourceToFilepath(source)
         return template_args
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def timeToDirpath(self, fcast_date):
+        return attrs = { 'date':fcast_date.strftime('%Y%m%d'),
+                         'month':fcast_date.strftime('%Y%m'),
+                         'year':fcast_date.year }
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def timeToFilepath(self, fcast_date):
+        return attrs = { 'date':fcast_date.strftime('%Y-%m-%d'),
+                         'month':fcast_date.strftime('%Y-%m'),
+                         'year':fcast_date.year }
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -132,7 +151,7 @@ class HourlyGridFactoryMethods:
 
 class HourlyGridFileFactory(HourlyGridFactoryMethods,
                             BasicFileAccessorMethods,
-                            ?????):
+                            object):
     """
     Basic factory for accessing data in Hourly grib files.
     """
