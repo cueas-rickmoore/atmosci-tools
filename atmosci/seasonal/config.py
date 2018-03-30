@@ -283,43 +283,49 @@ CFGBASE.groups.mint = { 'description':'Minimum daily temperature',
 ConfigObject('sources', CFGBASE)
 ConfigObject('sources', COMMON)
 
-COMMON.sources.acis = { 'acis_grid':3, 'days_behind':0,
-                'earliest_available_time':(10,30,0),
-                'subdir':'acis_hires', 'tag':'ACIS-HiRes',
-                'description':'ACIS HiRes grid 3',
+COMMON.sources.acis = { 'acis_grid':3,
                 'bbox':{'NE':'-82.75,37.125,-66.83,47.70',
                         'conus':'-125.00001,23.99999,-66.04165,49.95834'},
+                'days_behind':0,
+                'description':'ACIS HiRes grid 3',
+                'earliest_available_time':(10,30,0),
+                'filepath':'acis5k',
                 'grid_dimensions':ACIS_GRID_DIMENSIONS,
                 'node_spacing':ACIS_NODE_SPACING,
-                'search_radius':ACIS_SEARCH_RADIUS }
+                'search_radius':ACIS_SEARCH_RADIUS,
+                'subdir':'acis_hires',
+                'tag':'ACIS-HiRes' }
 CFGBASE.sources.link(COMMON.sources.acis)
 
-COMMON.sources.ndfd = { 'days_behind':0, 'tag':'NDFD',
-                'description':'National Digital Forecast Database',
-                'grid_dimensions':{'conus':{'lat':1377,'lon':2145},
-                                   'NE':{'lat':598,'lon':635}},
+COMMON.sources.ndfd = { 'days_behind':0,
+                'cache_server':'http://ndfd.eas.cornell.edu/',
                 'bbox':{'conus':'-125.25,23.749,-65.791,50.208',
                         'NE':'-83.125,36.75,-66.455,48.075'},
                 'bbox_offset':{'lat':0.375,'lon':0.375},
+                'description':'National Digital Forecast Database',
+                'download_template':'%(timespan)s-%(variable)s.grib',
+                'grid_dimensions':{'conus':{'lat':1377,'lon':2145},
+                                   'NE':{'lat':598,'lon':635}},
                 'indexes':{'conus':{'x':(0,-1),'y':(0,-1)},
                            'NE':{'x':(1468,2104),'y':(641,1240)}},
-                'cache_server':'http://ndfd.eas.cornell.edu/',
-                'download_template':'%(timespan)s-%(variable)s.grib',
-                'node_spacing':0.0248, 'resolution':'~2.5km',
                 'lat_spacing':(0.0198,0.0228),
                 'lon_spacing':(0.0238,0.0330),
+                'node_spacing':0.0248, 'resolution':'~2.5km',
                 'search_radius':0.0413,
-                }
+                'tag':'NDFD' }
 CFGBASE.sources.link(COMMON.sources.ndfd)
 
-COMMON.sources.prism = { 'acis_grid':21, 'days_behind':1,
-                'earliest_available_time':(10,30,0), 'tag':'PRISM',
-                'description':'PRISM Climate Data (ACIS grid 21)',
+COMMON.sources.prism = { 'acis_grid':21,
                 'bbox':{'NE':'-82.75,37.125,-66.7916,47.708',
                         'conus':'-125.00001,23.99999,-66.04165,49.95834'},
+                'days_behind':1,
+                'description':'PRISM Climate Data (ACIS grid 21)',
+                'earliest_available_time':(10,30,0),
+                'filepath':'prism5k',
                 'grid_dimensions':PRISM_GRID_DIMENSIONS,
                 'node_spacing':ACIS_NODE_SPACING,
-                'search_radius':ACIS_SEARCH_RADIUS }
+                'search_radius':ACIS_SEARCH_RADIUS,
+                'tag':'PRISM' }
 CFGBASE.sources.link(COMMON.sources.prism)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -71,6 +71,17 @@ class PathConstructionMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def subdirTemplate(self, subdir_key):
+        subdir_paths = self.config.get('subdir_paths', None)
+        if subdir_paths is not None:
+            path = subdir_paths.get(subdir_key, None)
+            if isinstance(path, basestring): return path
+            elif isinstance(path, (tuple,list)): return os.sep.join(path)
+            return path
+        return None
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def sourceDirpath(self, source, region):
         order = self.project.get('source_subdir_order', 'region-source')
         if order == 'region-source':
@@ -272,11 +283,16 @@ class PathConstructionMethods:
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def gridNodeToPath(self, node, precision=3):
-        factor = pow(10., precision)
-        if node[0] < 0: lon, lat = node # longitudes are always negative
-        else: lat, lon = node
-        nlon, nlat = self.acisNodeFinder(lon, lat, precision)
-        return '%d-%d' % (int(abs(nlon) * factor), int(nlat * factor))
+        if isinstance(node, (tuple,list)):
+            factor = pow(10., precision)
+            if node[0] < 0: lon, lat = node # longitudes are always negative
+            else: lat, lon = node
+            nlon, nlat = self.acisNodeFinder(lon, lat, precision)
+            return '%d-%d' % (int(abs(nlon) * factor), int(nlat * factor))
+        elif isinstance(node, basestring): return node
+        else:
+            errmsg = 'Unsopported type for "node" argument : '
+            raise TypeError, errmsg + str(type(node))
     gridNodeToDirpath = gridNodeToPath
     gridNodeToFilename = gridNodeToPath
 
@@ -335,7 +351,7 @@ class PathConstructionMethods:
 
     def sourceToFilepath(self, source):
         if isinstance(source, ConfigObject):
-            path = source.get('tag', source.name.upper())
+            path = source.get('filepath',source.get('tag',source.name.upper()))
         else: path = source.upper()
         return path.replace(' ','-').replace('_','-').replace('.','-')
 

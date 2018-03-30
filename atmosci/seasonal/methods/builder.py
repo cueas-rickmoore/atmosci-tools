@@ -49,19 +49,19 @@ class FileBuilderMethods:
         self._access_authority = ('r','a', 'w')
     
         # initialize private instance attributes
-        self.__config = project_config.copy()
-        self.__filetype = self.__config.getFiletype(filetype)
+        self._config = project_config.copy()
+        self._filetype = self._config.getFiletype(filetype)
         if isinstance(source, basestring):
-            self.__source = self.__config.sources[source]
-        else: self.__source = source
-        self.source_tag = self.__source.get('tag', self.__source.name)
+            self._source = self._config.sources[source]
+        else: self._source = source
+        self.source_tag = self._source.get('tag', self._source.name)
 
         if region is None:
-            region_key = kwargs.get('region', self.__config.project.region)
-            self.__region = self.__config.regions[region_key]
+            region_key = kwargs.get('region', self._config.project.region)
+            self._region = self._config.regions[region_key]
         elif isinstance(region, basestring):
-            self.__region = self.__config.regions[region]
-        else: self.__region = region
+            self._region = self._config.regions[region]
+        else: self._region = region
 
         self._additionalPreBuildInit(**kwargs)
 
@@ -79,6 +79,10 @@ class FileBuilderMethods:
 
     def initFileAttributes(self, **kwargs):
         file_attrs =  self._resolveCommonAttributes(**kwargs)
+
+        content = self.filetype.get('content', None)
+        if content is not None: file_attrs['content'] = content
+
         scope = self.filetype.get('scope',None)
         if scope is not None: file_attrs['scope'] = scope
 
@@ -86,8 +90,7 @@ class FileBuilderMethods:
 
         # subclasses may require additional file attributes
         more_attrs = self.additionalFileAttributes(**kwargs)
-        if more_attrs:
-            file_attrs.update(more_attrs)
+        if more_attrs: file_attrs.update(more_attrs)
 
         self.open('a')
         self.setFileAttributes(**file_attrs)
@@ -126,23 +129,23 @@ class FileBuilderMethods:
 
     @property
     def config(self):
-        return self.__config
+        return self._config
 
     @property
     def filetype(self):
-        return self.__filetype
+        return self._filetype
 
     @property
     def project(self):
-        return self.__config.get('project',None)
+        return self._config.get('project',None)
 
     @property
     def region(self):
-        return self.__region
+        return self._region
 
     @property
     def source(self):
-        return self.__source
+        return self._source
 
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
@@ -153,7 +156,9 @@ class FileBuilderMethods:
                            **kwargs):
         dataset_name, dataset, dataset_keydict = \
                                self._datasetConfig(dataset_key, **kwargs)
+        self.open('r')
         if self.datasetExistsIn(dataset_name, group_path): return
+        self.close()
 
         if group_path is not None:
             dataset_path = '%s.%s' % (group_path, dataset_name)
@@ -406,8 +411,11 @@ class FileBuilderMethods:
                 if key not in _keydict_: _keydict_[key] = value
 
         attrs = self._resolveCommonAttributes(**kwargs)
-        attrs['description'] = \
+        description = \
             self._resolveDatasetDescription(dataset_config, **_keydict_)
+        if isinstance(description, dict): attrs.update(description)
+        else: attrs['description'] = description
+            
         attrs.update(self._resolveSourceAttributes(**kwargs))
         attrs.update(self._resolveScopeAttributes(dataset_config, **kwargs))
         time_attrs = self._resolveTimeAttributes(dataset_config, **kwargs)
@@ -638,7 +646,73 @@ class GridFileBuildMethods(FileBuilderMethods):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class ProvenanceBuilderMethods(FileBuilderMethods):
+class ProvenanceManagerMethods:
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    
+    def generateEmptyProvenance(self, prov_config, prov_views, attrs):
+        time_view = prov_config.names[0]
+        if time_view in prov_views.date:
+            return self._generateEmptyDateProvenance(prov_config, attrs)
+        elif time_view in prov_views.doy:
+            return self._generateEmptyDoyProvenance(prov_config, attrs)
+        else:
+            empty_record = prov_config.empty
+            return [empty_record for day in range(self.num_days)]
+
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+    # provenance dataset config and generators
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+
+    def _generateEmptyDateProvenance(self, provenance, attrs):
+        records = [ ]
+        record_tail = provenance.empty[1:]
+
+        date = asDatetimeDate(attrs.get('start_date',self.start_date))
+        while date <= self.end_date:
+            record = (asAcisQueryDate(date),) + record_tail
+            records.append(record)
+            date += ONE_DAY
+        return records
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _generateEmptyDoyProvenance(self, provenance, attrs):
+        records = [ ]
+        record_tail = provenance.empty[1:]
+        doy_type = N.dtype(provenance.empty[0])
+        start_doy = self._startDoy(attrs)
+        for day_num in range(self.num_days):
+            record = (doy_type.type(start_doy+day_num),) + record_tail
+            records.append(record)
+        return records
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _provenanceConfig(self, provenance_key):
+        reference = None
+        if ':' in provenance_key:
+            parts = provenance_key.split(':')
+            if len(parts) == 2: name, key = parts
+            elif len(parts) == 3: name, reference, key = parts
+        else: name = key = provenance_key
+        prov_config = self.config.provenance.types[key].copy()
+        views = self.config.provenance.views
+        return prov_config.get('path', name), reference, prov_config, views
+    _getProvenanceConfig = _provenanceConfig # backwards compatibility
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _provenanceGenerator(self, provenance_key):
+        return self.prov_generators[provenance_key]
+    _getProvenanceGenerator = _provenanceGenerator # backwards compatibility
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class ProvenanceBuilderMethods(ProvenanceManagerMethods, FileBuilderMethods):
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def preInitBuilder(self, project_config, filetype, source, region, 
                              **kwargs):
@@ -740,7 +814,9 @@ class ProvenanceBuilderMethods(FileBuilderMethods):
                                   self._provenanceConfig(provenance_key)
         group_name = kwargs.get('group_name', None)
         group_path = kwargs.get('group_path', group_name)
+        self.open('r')
         if self.datasetExistsIn(dataset_name, group_path): return
+        self.close()
 
         if group_path is not None:
             dataset_path = '%s.%s' % (group_path ,dataset_name)
@@ -751,10 +827,11 @@ class ProvenanceBuilderMethods(FileBuilderMethods):
         if description is None:
             if group_name is not None:
                 attrs['description'] = 'Provenance for %s' % group_name
-            else: attrs['description'] = 'Provenance for %s' % dataset_name
+            else:
+                attrs['description'] = 'Provenance for %s' % reference
         if reference is not None: attrs['reference'] = reference
 
-        records = self.generateEmptyProvenance(prov_config, attrs)
+        records = self.generateEmptyProvenance(prov_config, prov_views, attrs)
 
         names = prov_config.names
         formats = prov_config.formats
@@ -764,38 +841,6 @@ class ProvenanceBuilderMethods(FileBuilderMethods):
         self.createDataset(dataset_path, provenance, raw=True)
         self.setDatasetAttributes(dataset_path, **attrs)
         self.close()
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def generateEmptyProvenance(self, prov_config, attrs):
-        num_records = prov_config.get('num_records',
-                                      attrs.get('num_records', None))
-        errmsg = 'Cannot determine number of provenance records from arguments'
-        assert(num_records is not None), errmsg
-        errmsg = 'Need number of records > 0 to generate empty provenance'
-        assert(num_records > 0), errmsg
-        empty_record = prov_config.empty
-        return [empty_record for record in range(num_records)]
-
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-    # provenance dataset config and generators
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-
-    def _provenanceConfig(self, provenance_key):
-        reference = None
-        if ':' in provenance_key:
-            parts = provenance_key.split(':')
-            if len(parts) == 2: name, key = parts
-            elif len(parts) == 3: name, reference, key = parts
-        else: name = key = provenance_key
-        prov_config = self.config.provenance.types[key].copy()
-        views = self.config.provenance.views
-        return prov_config.get('path', name), reference, prov_config, views
-    _getProvenanceConfig = _provenanceConfig # backwards compatibility
-
-    def _provenanceGenerator(self, provenance_key):
-        return self.prov_generators[provenance_key]
-    _getProvenanceGenerator = _provenanceGenerator # backwards compatibility
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -888,43 +933,6 @@ class TimeGridFileBuildMethods(ProvenanceBuilderMethods):
         attrs['num_days'] = self.num_days
         return attrs
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    
-    def generateEmptyProvenance(self, prov_config, attrs):
-        time_view = prov_config.names[0]
-        if time_view in prov_views.date:
-            return self._generateEmptyDateProvenance(prov_config, attrs)
-        elif time_view in prov_views.doy:
-            return self._generateEmptyDoyProvenance(prov_config, attrs)
-        else:
-            empty_record = prov_config.empty
-            return [empty_record for day in range(self.num_days)]
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _generateEmptyDateProvenance(self, provenance, attrs):
-        records = [ ]
-        record_tail = provenance.empty[1:]
-
-        date = asDatetimeDate(attrs.get('start_date',self.start_date))
-        while date <= self.end_date:
-            record = (asAcisQueryDate(date),) + record_tail
-            records.append(record)
-            date += ONE_DAY
-        return records
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _generateEmptyDoyProvenance(self, provenance, attrs):
-        records = [ ]
-        record_tail = provenance.empty[1:]
-        doy_type = N.dtype(provenance.empty[0])
-        start_doy = self._startDoy(attrs)
-        for day_num in range(self.num_days):
-            record = (doy_type.type(start_doy+day_num),) + record_tail
-            records.append(record)
-        return records
-
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
     # attribute resolution methods
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
@@ -998,7 +1006,7 @@ class TimeGridFileBuildMethods(ProvenanceBuilderMethods):
         inherit = ProvenanceBuilderMethods
         attrs = \
         inherit._resolveProvenanceBuildAttributes(self, prov_config, **kwargs)
-        view = attrs['view']
+        view = attrs.get('period', attrs.get('view','date'))
         if view in ('date','obs_date','obsdate'):
             attrs.update(self._resolveDateAttributes(prov_config, **kwargs))
         elif view == 'doy':

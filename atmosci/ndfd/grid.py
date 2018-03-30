@@ -21,10 +21,6 @@ from atmosci.hourly.builder import HourlyGridBuilderMethods
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-from atmosci.ndfd.prov_config import PROVENANCE
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
 class NdfdGridFileReader(HourlyGridFileReader):
     pass
 
@@ -46,13 +42,12 @@ class NdfdGridFileManagerMethods:
         num_hours = \
             self._insertTimeSlice(dataset_path, data, time_index, **kwargs)
         prov_path = kwargs.get('provenance_path', 'provenance')
-        self.insertProvenance(prov_path, start_time, data, source='fudged',
-                              **kwargs)
+        self.insertProvenance(prov_path, start_time, data, source='fudged')
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def insertPcpnPopProvenance(self, prov_path, start_time, pcpn, pop,
-                                      **kwargs):
+                                      source='NDFD', **kwargs):
         """ Generates provenance records for PCPN/POP data
 
         Arguments
@@ -68,31 +63,32 @@ class NdfdGridFileManagerMethods:
         
         NOTE: Dimensions of the pcpn and pop arrays must match exactly.
         """
-        generate = self._provenance_generators['pcpnpop']
+        generate = self.provenanceGenerator(prov_path)
         timestamp = kwargs.get('timestamp', self.timestamp)
 
         if pcpn.ndim == 2:
-            records = [generate(start_time, timestamp, pcpn, pop),]
+            records = [generate(start_time, timestamp, pcpn, pop, source),]
             end_time = start_time
         else:
             records = [ ]
             for hour in range(pcpn.shape[0]):
                 fcast_time = start_time + datetime.timedelta(hours=hour)
-                record = generate(fcast_time, timestamp, pcpn[hour], pop[hour])
+                record = generate(fcast_time, timestamp, pcpn[hour],
+                                  pop[hour], source)
                 records.append(record)
             end_time = fcast_time
 
         num_hours = len(records)
-        start_index = self._timeToIndex(dataset_path, start_time)
+        start_index = self.indexForTime(prov_path, start_time)
         end_index = start_index + num_hours
 
         prov_dataset = self.getDataset(prov_path)
-        names, formats = zip(*dataset.dtype.descr)
+        names, formats = zip(*prov_dataset.dtype.descr)
         provenance = N.rec.fromrecords(records, shape=(num_hours,),
                            formats=list(formats), names=list(names))
         prov_dataset[start_index:end_index] = provenance
         prov_dataset.attrs['updated'] = self.timestamp
-        return fcast_time
+        return start_time
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -106,7 +102,8 @@ class NdfdGridFileManagerMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def updateForecast(self, dataset_path, start_time, data, **kwargs):
+    def updateForecast(self, dataset_path, start_time, data, source='NDFD',
+                             update_provenance=True, **kwargs):
         if len(data.shape) == 2:
             end_time = start_time
         else:
@@ -122,50 +119,17 @@ class NdfdGridFileManagerMethods:
         time_index = self.indexForTime(dataset_path, start_time, **kwargs)
         self._insertTimeSlice(dataset_path, data, time_index, **kwargs)
         self.setForecastTimes(dataset_path, start_time, end_time)
+        timestamp = self._timestamp_()
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
 
-        # uodate provenance when present
-        prov_path = kwargs.get('provenance_path', 'provenance')
-        if self.hasDataset(prov_path):
-            self.insertProvenance(prov_path, start_time, data, **kwargs)
-            self.setForecastTimes(prov_path, start_time, end_time)
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def updatePcpnPopForecast(self, start_time, pcpn, pop, **kwargs):
-        if len(pcpn.shape) == 2:
-            end_time = start_time
-        else:
-            frequency = self.datasetAttribute('PCPN','frequency',1)
-            end_hour = (pcpn.shape[0]-1) * frequency
-            end_time = start_time + datetime.timedelta(hours=end_hour)
-        self.validateDataTimes(pcpn, start_time, end_time)
-
-        # update precip data
-        if N.isnan(pcpn):
-            pcpn = N.empty(pop.shape, self.datasetType('PCPN'))
-            pcpn.fill(self.datasetAttribute('PCPN', 'missing'))
-
-        time_index = self.indexForTime('PCPN', start_time, **kwargs)
-        processor = self.inputProcessor('PCPN')
-        if processor is not None: 
-            data = processor(data)
-            self._insertTimeSlice('PCPN',processor(pcpn),time_index,**kwargs)
-        else: self._insertTimeSlice('PCPN', pcpn, time_index, **kwargs)
-        self.setForecastTimes('PCPN', start_time, end_time)
-
-        # update pop12 data
-        time_index = self.indexForTime('POP', start_time, **kwargs)
-        processor = self.inputProcessor('POP')
-        if processor is not None: 
-            self._insertTimeSlice('POP', processor(pop), time_index, **kwargs)
-        else: self._insertTimeSlice('POP', pop, time_index, **kwargs)
-        self.setForecastTimes('POP', start_time, end_time)
-
-        # uodate provenance when present
-        prov_path = kwargs.get('provenance_path', 'provenance')
-        self.insertPcpnPopProvenanceR(prov_path, start_time, pcpn, pop,
-                                      **kwargs)
-        self.setForecastTimes(prov_path, start_time, end_time)
+        # update provenance when present
+        if update_provenance:
+            prov_path = kwargs.get('provenance_path', 'provenance')
+            if self.hasDataset(prov_path):
+                self.insertProvenance(prov_path, start_time, data,
+                                      source=source)
+                self.setForecastTimes(prov_path, start_time, end_time)
+                self.setDatasetAttribute(prov_path, 'updated', timestamp)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -246,7 +210,6 @@ class NdfdGridFileManager(NdfdGridFileManagerMethods, HourlyGridFileManager):
 
     def _loadManagerAttributes_(self):
         HourlyGridFileManager._loadManagerAttributes_(self)
-        self.updateProvenanceConfig(PROVENANCE)
         self._loadHourGridAttributes_()
 
 

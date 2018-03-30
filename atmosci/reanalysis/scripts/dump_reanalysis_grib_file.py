@@ -25,8 +25,7 @@ from atmosci.reanalysis.config import CONFIG
 from optparse import OptionParser
 parser = OptionParser()
 
-parser.add_option('-a', action='store', dest='analysis',
-                        default=CONFIG.sources.reanalysis.project.analysis)
+parser.add_option('-a', action='store', dest='analysis', default='rtma')
 
 parser.add_option('-d', action='store_true', dest='dev_mode', default=False)
 parser.add_option('-v', action='store_true', dest='verbose', default=False)
@@ -53,7 +52,7 @@ verbose = options.verbose or debug
 
 analysis_source = '.'.join((analysis,grib_source))
 
-grib_var_name = args[0]
+grib_var_name = args[0].upper()
 grib_time = (int(args[1]),int(args[2]),int(args[3]),int(args[4]))
 grib_time = tzutils.asHourInTimezone(grib_time, 'UTC')
 print 'requesting dump of %s grib for %s' % (analysis_source, str(grib_time))
@@ -78,4 +77,5 @@ reader = grib_factory.gribFileReader(grib_time, grib_var_name,
 print '\ndumping info from :\n    ', reader.filepath
 print '\nlong names in this file :\n', reader.grib_names
 print '\nshort names in this file :\n', reader.short_names
+print '\nmessage :\n', reader.messageFor(grib_var_name.lower())
 

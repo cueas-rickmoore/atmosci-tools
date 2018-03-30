@@ -412,16 +412,15 @@ class NdfdGridFactoryMethods(NDFDFactoryMethods):
         # build the file
         builder.open('a')
         builder.build(lons=lons, lats=lats)
-        builder.close()
         del lats, lons
 
         if debug:
-            builder.open('r')
             time_attrs = builder.timeAttributes(self.datasetName(variable))
-            builder.close()
             print '\nbuild file time attrs :'
             for key, value in time_attrs.items():
                 print '    %s : %s' % (key, repr(value))
+
+        return builder
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -496,12 +495,13 @@ class NdfdGridFactoryMethods(NDFDFactoryMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def ndfdGridFileManager(self, fcast_date, variable, region, **kwargs):
+    def ndfdGridFileManager(self, fcast_date, variable, region, mode='a',
+                                  **kwargs):
         filepath = \
             self.ndfdGridFilepath(fcast_date, variable, region, **kwargs)
-
+        
         Class = self.fileAccessorClass('ndfd_grid', 'manage')
-        return Class(filepath, **kwargs)
+        return Class(filepath, mode, **kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

@@ -177,6 +177,7 @@ class MinimalFactoryMethods:
             errmsg = '"self.config.modes.%s.dirpaths" is not configured.'
             raise KeyError, errmsg % mode
         
+        self._path_mode = mode
         self.config.dirpaths.update(dirpaths)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

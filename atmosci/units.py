@@ -235,7 +235,6 @@ FORMULAS = {
     # precipitation
     , 'cm_to_kg/m^2' : ('*', 10.0)
     , 'in_to_kg/m^2' : ('*', 25.4)
-    , 'in_to_kg/m^2' : ('*', 25.4)
     , 'kg/m^2_to_in' : ('*', 0.039370)
     , 'kg/m^2_to_cm' : ('*', 0.1)
     , 'kg/m^2_to_mm' : ('==','x')

@@ -424,8 +424,7 @@ class HourlyGridFileBuilder(HourlyGridBuilderMethods, HourlyGridFileManager):
     """
     def __init__(self, hdf5_filepath, config, filetype, region, source,
                        timezone, lons=None, lats=None, **kwargs):
-        self.preInitBuilder(config, filetype, region, source, timezone,
-                            **kwargs)
+        self.preInitBuilder(config, filetype, region, source, timezone, kwargs)
         mode = kwargs.get('mode', 'w')
         if mode == 'w':
             self.load_manager_attrs = False
@@ -448,5 +447,6 @@ class HourlyGridFileBuilder(HourlyGridBuilderMethods, HourlyGridFileManager):
         if self.load_manager_attrs:
             HourlyGridFileManager._loadManagerAttributes_(self)
         else:
-            self._loadProvenanceGenerators_()
+            if hasattr(self, '_loadProvenanceGenerators_'):
+                self._loadProvenanceGenerators_()
             self.time_attr_cache = { }

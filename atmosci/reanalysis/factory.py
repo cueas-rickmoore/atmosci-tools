@@ -134,7 +134,7 @@ class ReanalysisFactoryMethods(PathConstructionMethods,
         elif kwargs.get('use_previous_time', False):
             return {'utc_date':'previous', 'utc_time':'previous',
                     'utc_hour':'previous'}
-        elif kwargs.get('use_time_in_path', True):
+        elif kwargs.get('use_time_in_path', False):
             return tzutils.utcTimeStrings(datetime_hour)
         else: 
             utc_times = tzutils.utcTimeStrings(datetime_hour)
@@ -401,8 +401,10 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
 
     def gridFileBuilder(self, reference_time, variable, region, timezone,
                               lons=None, lats=None, **kwargs):
-        filepath = self.analysisGridFilepath(reference_time, variable,
-                                             region, **kwargs)
+        filepath = kwargs.get('filepath', None)
+        if filepath is None:
+            filepath = self.analysisGridFilepath(reference_time, variable,
+                                                 region, **kwargs)
         kwargs['timezone'] = timezone
         kwargs.update(self._extractTimes(reference_time, **kwargs))
         del kwargs['timezone']
@@ -514,7 +516,8 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class ReanalysisGridFileFactory(ReanalysisGridFactoryMethods, object):
+class ReanalysisGridFileFactory(StaticFileAccessorMethods,
+                                ReanalysisGridFactoryMethods, object):
     """
     Basic factory for accessing data in Reanalysis grib files.
     """
@@ -529,4 +532,25 @@ class ReanalysisGridFileFactory(ReanalysisGridFactoryMethods, object):
 
         # simple hook for subclasses to initialize additonal attributes  
         self.completeInitialization(**kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def buildReanalysisGridFile(self, reference_time, variable, grid_region,
+                                timezone):
+        builder = self.gridFileBuilder(reference_time, variable, grid_region,
+                                       timezone, None, None)
+        region = factory.regionConfig(grid_region)
+        source = factory.sourceConfig('acis')
+        reader = factory.staticFileReader(source, region)
+        lats = reader.getData('lat')
+        lons = reader.getData('lon')
+        reader.close()
+        del reader
+
+        # build all of the datasets
+        builder.build(lons=lons, lats=lats)
+        del lats, lons
+        print '\nBuilt "%s" reanalysis grid file :' % variable
+        print '    ', builder.filepath
+        builder.close()
 

@@ -77,13 +77,6 @@ class ReanalysisGridFileManagerMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def sourcePriority(self, source):
-        sources = self.source.source_priority
-        if source in sources: return sources.index(source), sources
-        return -1, sources
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
     def isReanalysis(self, **kwargs):
         source = kwargs.get('source', None)
         return source in self.source.source_priority
@@ -151,6 +144,13 @@ class ReanalysisGridFileManagerMethods:
         elif source in ('ndfd','forecast'):
             self.setForecastTimes(dataset_path, start_time, end_time)
         else: self.setLastObsTime(dataset_path, end_time, **kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def sourcePriority(self, source):
+        sources = self.source.source_priority
+        if source in sources: return sources.index(source), sources
+        return -1, sources
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -242,7 +242,7 @@ class ReanalysisGridFileManagerMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def updateRenalysisData(self, source, dataset_path, start_time, data,
+    def updateReanalysisData(self, source, dataset_path, start_time, data,
                                   **kwargs):
         if source.lower() == 'urma':
             self.updateWithUrmaData(dataset_path, start_time, data, **kwargs)
@@ -321,7 +321,12 @@ class ReanalysisGridFileManagerMethods:
 
         # precip data input processor
         def processPcpn(data):
-            data[N.where(data < 0.01)] = 0.
+            nans = N.where(N.isnan(data))
+            if len(nans[0]) > 0:
+                data[nans] = 0.
+                data[N.where(data < 0.01)] = 0.
+                data[nans] = N.nan
+            else: data[N.where(data < 0.01)] = 0.
             return N.around(data, 2)
         self.processors.PCPN = processPcpn
 

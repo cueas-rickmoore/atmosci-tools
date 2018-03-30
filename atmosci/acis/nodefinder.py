@@ -1,20 +1,14 @@
 
-import math
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class AcisGridNodeFinder(object):
 
     def __init__(self, region='conus'):
-	self.spacing = 0.041667
-
-        if region.lower() == 'ne':
-            self.min_lat = 37.125
-            self.min_lon =  -82.75
-        else: # default to continental US
-            self.min_lat = 24.0
-            self.min_lon = -125.0
-        self.abs_lon = abs(self.min_lon)
+        self.spacing = 0.041667
+        if isinstance(region, basestring):
+            self._init_region_dimenasions_(region.lower())
+        else: # assume it is a legit region object
+            self._init_region_dimenasions_(region.name)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -39,6 +33,17 @@ class AcisGridNodeFinder(object):
 	offset = round(diff / spacing) * spacing
 	node_lat = self.min_lat + offset
 	return round(node_lat, precision)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _init_region_dimenasions_(self, region):
+        if region == 'ne':
+            self.min_lat = 37.125
+            self.min_lon =  -82.75
+        else: # default to continental US
+           self.min_lat = 24.0
+           self.min_lon = -125.0
+        self.abs_lon = abs(self.min_lon)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 

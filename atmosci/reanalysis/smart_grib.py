@@ -1,7 +1,7 @@
 
+import os
 import datetime
 ONE_HOUR = datetime.timedelta(hours=1)
-import warnings
 
 import numpy as N
 import pygrib
@@ -41,20 +41,31 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
         verbose = kwargs.get('verbose', False)
         return_units = kwargs.get('return_units', False)
 
-        found, reader = self.gribFileReader(grib_hour, variable),
-        if verbose: print '\nreading data from :\n    ', reader.filepath
+        found, reader = self.readerForHour(variable, grib_hour)
         if not found:
-            filepath = self.gribFilepath(grib_time, variable, self.grib_region)
-            return False, (grib_time, filepath)
+            hour, filepath = reader
+            if debug:
+                errmsg = '\nWARNING : %s : grib file not found\n%s\n'
+                print errmsg % (hour, filepath)
+            return False, ('grib file not found', hour, filepath)
+        else:
+            if debug: print '\nreading data from :\n    ', reader.filepath
 
         # read the message
         try:
             message = reader.messageFor(variable)
         except Exception as e:
-            return False, (grib_time, reader.filepath)
+            why = 'variable not in grib file'
+            if debug:
+                errmsg = '\nWARNING : %s %s for %s\n'
+                print errmsg % (variable, why, grib_hour)
+            return False, (why, grib_hour, reader.filepath)
 
         units = message.units
-        if debug:
+        if verbose:
+            time_str = grib_hour.strftime('%Y-%m-%d:%H')
+            print 'processing reanalysis grib for', time_str
+        elif debug:
             print 'message retrieved :\n    ', message
             print '\n            grib_time :', message.dataTime
             print '             analDate :', message.analDate
@@ -100,6 +111,22 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def lastAvailableHour(self, variable, reference_time):
+        year = reference_time.year
+        month = reference_time.month
+        last_day = lastDayOfMonth(year, month)
+        last_hour = datetime.datetime(year, month, last_day, 23)
+        target_hour = tzutils.asUtcTime(last_hour, 'UTC')
+        # look for the last available file in the month
+        while target_hour.month == month:
+            filepath = self.gribFilepath(target_hour, variable, self.region)
+            if os.path.exists(filepath): return target_hour
+            target_hour -= ONE_HOUR
+        # no data available for the month
+        return None
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def readerForHour(self, variable, hour):
         try:
             reader = self.gribFileReader(hour, variable, self.grib_region,
@@ -108,25 +135,29 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
             return True, reader
 
         except IOError: # IOError means file for this hour does not exist
-            filepath = self.gribFilepath(grib_time, variable, self.grib_region)
-            return False, (grib_time, filepath)
+            filepath = self.gribFilepath(hour, variable, self.grib_region)
+            return False, (hour, filepath)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def slices(self, data_start_time, data_end_time, hours_per_slice=24):
 
+        prev_month = data_start_time.month
         num_hours = tzutils.hoursInTimespan(data_start_time, data_end_time)
-        if num_hours <= hours_per_slice:
+        if data_end_time.month == data_start_time.month:
             return ((data_start_time, data_end_time),)
 
         slices = [ ]
-        increment = datetime.timedelta(hours=hours_per_slice-1)
-        
         slice_start = data_start_time
-        while slice_start <= data_end_time:
-            slice_end = min(slice_start + increment, data_end_time)
+        slice_month = slice_start_month
+
+        while slice_start.month < data_end_time.month:
+            last_day = lastDayOfMonth(slice_start.year,slice_start.month)
+            slice_end = slice_start.replace(day=last_day, hour=23)
             slices.append((slice_start, slice_end))
             slice_start = slice_end + ONE_HOUR
+
+        slices.append((slice_start, data_end_time))
 
         return tuple(slices)
 
@@ -137,20 +168,20 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
         if self.grib_indexes is None: self._initStaticResouces_()
 
-        # filter annoying numpy warnings
-        warnings.filterwarnings('ignore',"All-NaN axis encountered")
-        warnings.filterwarnings('ignore',"All-NaN slice encountered")
-        warnings.filterwarnings('ignore',"invalid value encountered in greater")
-        warnings.filterwarnings('ignore',"invalid value encountered in less")
-        warnings.filterwarnings('ignore',"Mean of empty slice")
-        # MUST ALSO TURN OFF WARNING FILTERS AT END OF SCRIPT !!!!!
-
         region = kwargs.get('region', self.region)
+        verbose = kwargs.get('verbose', False)
         
         grib_start_time = tzutils.tzaDatetime(slice_start_time, self.tzinfo)
         grib_end_time = tzutils.tzaDatetime(slice_end_time, self.tzinfo)
-        num_hours = tzutils.hoursInTimespan(grib_start_time, grib_end_time)
 
+        # a requested end time is not necessarily available
+        # so strip off missing hours from end of time span
+        while grib_end_time >= grib_start_time:
+            filepath = self.gribFilepath(grib_end_time, variable, region)
+            if os.path.exists(filepath): break
+            grib_end_time -= ONE_HOUR
+
+        num_hours = tzutils.hoursInTimespan(grib_start_time, grib_end_time)
         data = N.empty((num_hours,)+self.grid_dimensions, dtype=float)
         data.fill(N.nan)
 
@@ -169,16 +200,13 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
             date_indx += 1
 
         while grib_time <= grib_end_time:
-            success, data_for_hour = \
+            success, package = \
                 self.dataForHour(variable, grib_time, **kwargs)
-            if success: data[date_indx,:,:] = data_for_hour
-            else: failed.append(data_for_hour)
+            if success: data[date_indx,:,:] = package
+            else: failed.append(package)
 
             grib_time += ONE_HOUR
             date_indx += 1
-
-        # turn annoying numpy warnings back on
-        warnings.resetwarnings()
 
         return units, data, tuple(failed)
 

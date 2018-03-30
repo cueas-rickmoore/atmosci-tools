@@ -17,9 +17,9 @@ from atmosci.hdf5.hourgrid import Hdf5HourlyGridFileReader, \
 
 from atmosci.seasonal.methods.grid import GridFileReaderMethods, \
                                           GridFileManagerMethods
+from atmosci.seasonal.methods.builder import GridFileBuildMethods
 
-from atmosci.seasonal.methods.provenance import ProvenanceManagerMethods
-
+from atmosci.hourly.builder import HourlyGridBuilderMethods
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -27,7 +27,7 @@ from atmosci.hourly.prov_config import PROVENANCE
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class HourlyGridFileReaderMethods(GridFileReaderMethods):
+class HourlyDataReaderMethods(GridFileReaderMethods):
 
     def _loadProjectFileAttributes_(self):
         #attrs = self.getFileAttributes()
@@ -51,7 +51,7 @@ class HourlyGridFileReaderMethods(GridFileReaderMethods):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class HourlyGridFileReader(HourlyGridFileReaderMethods,
+class HourlyDataFileReader(HourlyDataReaderMethods,
                            Hdf5HourlyGridFileReader):
 
     def __init__(self, hdf5_filepath, kwarg_dict={}):
@@ -67,9 +67,8 @@ class HourlyGridFileReader(HourlyGridFileReaderMethods,
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
-                                   ProvenanceManagerMethods,
-                                   GridFileManagerMethods):
+class HourlyDataManagerMethods(HourlyDataReaderMethods,
+                               GridFileManagerMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -92,17 +91,18 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
             self.timeAttribute(dataset_path, 'fcast_end_time', None)
 
         if fcast_end_time is not None:
-            if fcast_end_time > last_obs_time:
-                # forecast was partially overwritten by observation data
-                fcast_start_time = \
-                    self.timeAttribute(dataset_path, 'fcast_start_time')
-                if fcast_start_time <= last_obs_time:
-                    fcast_start_time = last_obs_time + ONE_HOUR
-                    self.setTimeAttribute(dataset_path, 'fcast_start_time',
-                                          fcast_start_time)
-            else: # forecast was completely overwritten by observation data
+            if fcast_end_time <= last_obs_time:
+                # forecast was completely overwritten by observation data
                 self.deleteDatasetAttribute(dataset_path, 'fcast_start_time')
                 self.deleteDatasetAttribute(dataset_path, 'fcast_end_time')
+
+            else: # forecast was partially overwritten by observation data
+                fcast_start_time = \
+                    self.timeAttribute(dataset_path, 'fcast_start_time')
+                if fcast_start_time <= obs_time:
+                    fcast_start_time = obs_time + ONE_HOUR
+                    self.setTimeAttribute(dataset_path, 'fcast_start_time',
+                                          fcast_start_time)
         
         #else: forecast has never been set
 
@@ -127,176 +127,6 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
 
         elif data.ndim == 2: # 2D array has a single hour
             return start_time
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def generateGroupProvenanceRecords(self, prov_path, start_time,
-                                             data1, data2, **kwargs):
-        """ Generates provenance records for groups based on statistics
-        from 2 data arrays.
-
-        Arguments
-        --------------------------------------------------------------------
-        prov_path  : string - path to a provenance dataset.
-        start_time : datetime, scalar - hour/doy of provenance entry. If
-                     input data is 3D, it is the first hour/doy and entries
-                     will be generated for each day.
-        data1, data2 : 2D or 3D numpy arrays - dimensions must match
-                       data to be used to calculate provenance statistics.
-                       If 3D, time must be the 1st dimension.
-        """
-        generator = self.provenanceGenerator(prov_path)
-        timestamp = kwargs.get('timestamp', self.timestamp)
-
-        timezone = \
-            self.datasetAttribute(prov_path, 'timezone', self.default_timezone)
-        start_hour = tzutils.asHourInTimezone(start_time, timezone)
-
-        records = [ ]
-        if data1.ndim == 2:
-            records.append(generator(start_hour,timestamp,data1,data_2))
-            end_hour = start_hour
-        else:
-            for hour in range(data_1.shape[0]):
-                time_ = start_hour + datetime.timedelta(hours=hour)
-                record = generator(time_, timestamp, data1[hour], data2[hour])
-                records.append(record)
-            end_hour = time_
-
-        return start_hour, end_hour, records
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def generateProvenanceRecords(self, prov_path, start_time, data, **kwargs):
-        """ Generates provenance records based on statistics from a single
-        data array.
-
-        Arguments
-        --------------------------------------------------------------------
-        prov_path  : string - path to a provenance dataset.
-        start_time : datetime, scalar - hour/doy of provenance entry. If
-                     input data is 3D, it is the first hour/doy and entries
-                     will be generated for each day.
-        data       : 2D or 3D numpy array - data to be used to calculate
-                     provenance statistics. If 3D, time must be the 1st
-                     dimension.
-        """
-        timezone = \
-            self.datasetAttribute(prov_path, 'timezone', self.default_timezone)
-        start_hour = tzutils.asHourInTimezone(start_time, timezone)
-    
-        timestamp = kwargs.get('timestamp', self.timestamp)
-        
-        generator = self.provenanceGenerator(prov_path)
-        generator_args = inspect.getargspec(generator).args
-        records = [ ]
-
-        if 'source' in generator_args:
-            source = kwargs.get('source',
-                                self.fileAttribute('source','unknown'))
-            if data.ndim == 2:
-                records.append(generator(source, start_hour, timestamp, data))
-                end_hour = start_hour
-            else:
-                num_hours = data.shape[0]
-                end_hour = start_hour
-                for hour in range(num_hours):
-                    end_hour = start_hour + datetime.timedelta(hours=hour)
-                    record = generator(source, end_hour, timestamp, data[hour])
-                    records.append(record)
-        else:
-            if data.ndim == 2:
-                 records.append(generator(start_hour, timestamp, data))
-                 end_hour = start_hour
-            else:
-                num_hours = data.shape[0]
-                end_hour = start_hour
-                for hour in range(num_hours):
-                    end_hour = start_hour + datetime.timedelta(hours=hour)
-                    records.append(generator(end_hour, timestamp, data[hour]))
-
-        return start_hour, end_hour, records
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def insertProvenance(self, prov_path, start_time, data, **kwargs):
-        """ Inserts records into a provenance dataset using statistics
-        from the input data array. It's purpose if to overwrite previously
-        stored provenance with statistics from more recent information.
-
-        NOTE: this function does not update the hour attributes >>>
-              last_valid_time, last_obs_time, or fcast_end_time,
-              Use the "updateProvenance" method when an updates of
-              validity hour tracking attributes is also required.
-
-        Arguments
-        --------------------------------------------------------------------
-        prov_path  : string - path to a provenance dataset.
-        start_time : datetime, scalar - hour/doy of provenance entry. If
-                     input data is 3D, it is the first hour/doy and entries
-                     will be generated for each day.
-        data       : 2D or 3D grid - data to be used to calculated
-                     provenance statistics. If 3D, 1st dimension must be time.
-        """
-        start_hour, end_hour, records = \
-        self.generateProvenanceRecords(prov_path, start_time, data, **kwargs)
-        num_days = len(records)
-        start_index = self.indexForHour(prov_path, start_hour)
-        end_index = start_index + num_days
-
-        dataset = self.getDataset(prov_path)
-        names, formats = zip(*dataset.dtype.descr)
-        provenance = N.rec.fromrecords(records, shape=(num_days,),
-                           formats=list(formats), names=list(names))
-        dataset[start_index:end_index] = provenance
-
-        return start_hour, end_hour
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def insertGroupProvenance(self, path, start_time, data1, data2, **kwargs):
-        """ Inserts records into a provenance dataset using statistics
-        from the input data arrays. It's purpose if to overwrite previously
-        stored provenance with statistics from more recent information.
-
-        Arguments
-        --------------------------------------------------------------------
-        path : string - full path to the group or provenance dataset
-        start_time : datetime, scalar - hour/doy of provenance entry. If
-                     input data is 3D, it is the first hour/doy and entries
-                     will be generated for each day.
-        data1, data2 : 2D or 3D numpy arrays - dimensions must match
-                       data to be used to calculate provenance statistics.
-                       If 3D, time must be the 1st dimension.
-
-        Returns
-        --------------------------------------------------------------------
-        string containing full path to group provenance dataset
-
-
-        IMPORTANT
-        --------------------------------------------------------------------
-        This function does not update the hour attributes >>>
-             last_valid_time, last_obs_time, or fcast_end_time,
-        Use the "updateGroupProvenance" method when an update of validity
-        hour tracking attributes is also required.
-        """
-        if self.hasDataset(path): prov_path = path
-        else: prov_path = '%s.provenance' % path
-        provenance = self.generateGroupProvenanceRecords(prov_path,
-                                  start_time, data1, data2, **kwargs)
-        start_hour, end_hour, records = provenance
-        num_hours = len(records)
-        start_index = self.indexForHour(prov_path, start_hour)
-        end_index = start_index + num_hours
-
-        dataset = self.getDataset(prov_path)
-        names, formats = zip(*dataset.dtype.descr)
-        provenance = N.rec.fromrecords(records, shape=(num_hours,),
-                           formats=list(formats), names=list(names))
-        dataset[start_index:end_index] = provenance
-
-        return prov_path, start_hour, end_hour
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -377,9 +207,6 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
         time_index = self.indexForTime(dataset_path, start_time, **kwargs)
         num_hours = \
             self._insertTimeSlice(dataset_path, data, time_index, **kwargs)
-        if kwargs.get('update_provenance', False):
-            prov_path = kwargs.get('provenance_path', 'provenance')
-            self.updateProvenance(prov_path, start_time, data, **kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -474,52 +301,6 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
             self._insertTimeSlice(dataset_path, data, time_index, **kwargs)
         end_time = start_time + datetime.timedelta(hours=num_hours-1)
         self.setValidationTime(dataset_path, start_time, end_time, **kwargs)
-        if kwargs.get('update_provenance', False):
-            prov_path = kwargs.get('provenance_path', 'provenance')
-            self.updateProvenance(prov_path, start_time, data, **kwargs)
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def updateGroupProvenance(self, path, start_time, data1, data2, **kwargs):
-        """ Inserts records into a provenance dataset using statistics
-        from the input data arrays _AND_ updates the appropriate validity
-        hour tracking attributes of the provenance dataset: last_valid_time,
-        last_obs_time, fcast_end_time
-
-        Arguments
-        --------------------------------------------------------------------
-        path : string - full path to the group or provenance dataset
-        start_time : datetime, scalar - hour/doy of provenance entry. If
-                     input data is 3D, it is the first hour/doy and entries
-                     will be generated for each day.
-        data1, data2 : 2D or 3D numpy arrays - dimensions must match
-                       data to be used to calculate provenance statistics.
-                       If 3D, time must be the 1st dimension.
-        """
-        prov_path, start_hour, end_hour = \
-            self.insertGroupProvenance(path, start_time, data1, data2, **kwargs)
-        self.setValidationTime(prov_path, start_hour, end_hour, **kwargs)
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def updateProvenance(self, prov_path, start_time, data, **kwargs):
-        """ Inserts records into a provenance dataset using statistics
-        from the input data array _AND_ updates the appropriate validity
-        hour tracking attributes of the provenance dataset: last_valid_time,
-        last_obs_time, fcast_end_time
-
-        Arguments
-        --------------------------------------------------------------------
-        prov_path  : string - path to a provenance dataset.
-        start_time : datetime, scalar - hour/doy of provenance entry. If
-                     input data is 3D, it is the first hour/doy and entries
-                     will be generated for each day.
-        data       : 2D or 3D grid - data to be used to calculated
-                     provenance statistics. If 3D, 1st dimension must be time.
-        """
-        start_hour, end_hour = \
-            self.insertProvenance(prov_path, start_time, data, **kwargs)
-        self.setValidationTime(prov_path, start_hour, end_hour, **kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     #
@@ -617,19 +398,13 @@ class HourlyGridFileManagerMethods(HourlyGridFileReaderMethods,
     # private methods
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _initHourlyFileManager_(self):
-        self.initProvenanceConfig()
-        self.updateProvenanceConfig(PROVENANCE)
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
     def _preInitHourlyFileManager_(self, kwarg_dict):
         self._preInitHourlyFileReader_(kwarg_dict)
-        self._unpackers = { }
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class HourlyGridFileManager(HourlyGridFileManagerMethods,
+class HourlyDataFileManager(HourlyDataManagerMethods,
                             Hdf5HourlyGridFileManager):
 
     def __init__(self, hdf5_filepath, mode='r', **kwargs):
@@ -641,6 +416,41 @@ class HourlyGridFileManager(HourlyGridFileManagerMethods,
     def _loadManagerAttributes_(self):
         Hdf5HourlyGridFileManager._loadManagerAttributes_(self)
         self._loadHourGridAttributes_()
-        self._initHourlyFileManager_()
 
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class HourlyDataFileBuilder(HourlyGridBuilderMethods, GridFileBuildMethods,
+                            HourlyDataFileManager):
+    """ Creates a new HDF5 file with read/write access to 3D gridded data
+    where the first dimension is time, the 2nd dimension is longitude and
+    the 3rd dimension is latitude.
+    """
+    def __init__(self, hdf5_filepath, config, filetype, region, source,
+                       timezone, lons=None, lats=None, **kwargs):
+        self.preInitBuilder(config, filetype, region, source, timezone, kwargs)
+        mode = kwargs.get('mode', 'w')
+        if mode == 'w':
+            self.load_manager_attrs = False
+        else: self.load_manager_attrs = True
+
+        HourlyGridFileManager.__init__(self, hdf5_filepath, mode)
+        # set the time span for this file
+        #self.initTimeAttributes(**kwargs)
+        # close the file to make sure attributes are saved
+        self.close()
+        # reopen the file in append mode
+        self.open(mode='a')
+        # build lat/lon datasets if they were passed
+        if lons is not None:
+            self.initLonLatData(lons, lats, **kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    
+    def preInitBuilder(self, config, filetype, region, source, timezone,
+                       **kwargs):
+        GridFileBuildMethods.preInitBuilder(self, config, filetype, source,
+                                            region, **kwargs)
+        self._preInitHourlyFileManager_(kwargs)
+        self._preInitHourlyFileBuilder_(timezone, kwargs)
 

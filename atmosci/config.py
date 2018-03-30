@@ -13,12 +13,12 @@ ATMOSCFG = ConfigObject('atmosci', None)
 if 'win32' in sys.platform:
     default = { 'data':'C:\\Work\\app_data',
                 'shared':'C:\\Work\\app_data\\shared',
-                'static':'C:\\Work\\app_data\\static',
+                'static':'C:\\Work\\app_data\\shared\\grid\\static',
                 'working':'C:\\Work' }
 else:
     default = { 'data':'/Volumes/data/app_data',
                 'shared':'/Volumes/data/app_data/shared',
-                'static':'/Volumes/data/app_data/static',
+                'static':'/Volumes/data/app_data/shared/grid/static',
                 'working':'/Volumes/data' }
 
 # set the following parameter to the location of temporary forecast files
@@ -42,7 +42,7 @@ ATMOSCFG.modes = {
            'data':'/Volumes/Transport/data/app_data',
            'forecast':'/Volumes/Transport/data/app_data/shared/forecast',
            'shared':'/Volumes/Transport/data/app_data/shared',
-           'static':'/Volumes/Transport/data/app_data/static',
+           'static':'/Volumes/Transport/data/app_data/shared/grid/static',
            'working':'/Volumes/Transport/data'
           },
     },
@@ -51,7 +51,7 @@ ATMOSCFG.modes = {
              'data':'/Volumes/Transport/data/test_data',
              'forecast':'/Volumes/Transport/data/test_data/shared/forecast',
              'shared':'/Volumes/Transport/data/test_data/shared',
-             'static':'/Volumes/Transport/data/test_data/static',
+             'static':'/Volumes/Transport/data/test_data/shared/grid/static',
              'working':'/Volumes/Transport/data'
             },
     },

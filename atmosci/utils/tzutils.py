@@ -26,6 +26,18 @@ asTimezoneObj = asTzinfo
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+def isUtcTime(datetime_obj):
+    return type(datetime_obj.tzinfo) == type(pytz.UTC)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+def isUtcTimezone(timezone):
+    if isinstance(timezone, basestring): return timezone == 'UTC'
+    if type(timezone) == type(pytz.UTC): return True
+    return False
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 def hasValidTimezone(datetime_obj):
     return isValidTzinfo(datetime_obj.tzinfo)
 
@@ -35,14 +47,16 @@ def inSameTimezone(datetime_1, datetime_2):
     """
     Test whether 2 datetime.datetime instances are in the same timezone
     """ 
-    return isSameTimezone(datetime_1.tzinfo, datetime_2.tzinfo)
+    if isUtcTime(datetime_1): return isUtcTime(datetime_2)
+    return type(datetime_1.tzinfo) == type(datetime_2.tzinfo)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def isInTimezone(datetime_obj, timezone):
+    if isUtcTime(datetime_obj): return isUtcTimezone(timezone)
     if isinstance(timezone, basestring):
-        return isSameTimezone(datetime_obj.tzinfo, pytz.timezone(timezone))
-    return isSameTimezone(datetime_obj.tzinfo, timezone)
+        return type(datetime_obj.tzinfo) == type(pytz.timezone(timezone))
+    return type(datetime_obj.tzinfo) == type(timezone)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -183,7 +197,14 @@ def hourFromDatetime(datetime_obj):
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def hourFromString(time_str):
-    date, hour = time_str.split(':')
+    if ' '  in time_str:
+        date, times = time_str.split(' ')
+        if ':' in times:
+            splits = times.split(':')
+            hour = splits[0]
+        else: hour = times
+    else: date, hour = time_str.split(':')
+
     year, month, day = [int(n) for n in date.split('-')]
     return datetime.datetime(year, month, day, int(hour))
 

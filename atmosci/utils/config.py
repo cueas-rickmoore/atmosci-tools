@@ -234,6 +234,37 @@ class ConfigObject(object):
             else:
                 link_to.__dict__['__CHILDREN__'][link_name] = config.obj
 
+    def merge(self, obj):
+        if isinstance(obj, ConfigObject):
+            if obj.name == self.name:
+                for key, value in obj.attr_items:
+                    self.__dict__['__ATTRIBUTES__'][key] = value
+                for obj_child in obj.children:
+                    if obj_child.name in self.child_names:
+                        self[obj_child.name].merge(obj_child)
+                    else: self.addChild(child)
+            elif obj.name in self.child_names:
+                self[obj.name].merge(obj)
+            else: self.addChild(obj)
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                self._ingest_(key, value)
+        else:
+            raise TypeError, "Invalid type for 'obj' argument : %s" % type(obj)
+
+    def move(self, from_key, to_key):
+        child = self.__dict__['__CHILDREN__'].get(from_key, None)
+        if child is None:
+            value = self.__dict__['__ATTRIBUTES__'].get(from_key, None)
+            if value is not None:
+                self.__dict__['__ATTRIBUTES__'][to_key] = value
+                self.__dict__['__ATTRIBUTES__'][from_key] = None
+                del self.__dict__['__ATTRIBUTES__'][from_key]
+        else:
+            self.__dict__['__CHILDREN__'][to_key] = value
+            self.__dict__['__CHILDREN__'][from_key] = None
+            del self.__dict__['__CHILDREN__'][from_key]
+
     def newChild(self, path, obj=None):
         if '.' not in path:
             if path not in self.__dict__['__CHILDREN__']:
@@ -258,6 +289,20 @@ class ConfigObject(object):
                     raise TypeError, errmsg % path
         return child
 
+    def spawn(self, name, obj=None):
+        config = ConfigObject(name, None)
+        if obj is None: return config
+
+        if isinstance(obj, ConfigObject):
+            config.addChild(obj)
+            return config
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                obj._ingest_(key, value)
+            return config
+
+        raise TypeError, "Invalid type for 'obj' argument : %s" % type(obj)
+
     def update(self, obj):
         if isinstance(obj, ConfigObject):
             if obj.name == self.name: self._update_(obj)
@@ -266,7 +311,7 @@ class ConfigObject(object):
             else: self.addChild(obj)
         elif isinstance(obj, dict):
             for key, value in obj.items():
-                self._set_value_of_([key,], value)
+                self._ingest_(key, value)
         else:
             raise TypeError, "Invalid type for 'obj' argument : %s" % type(obj)
 
@@ -526,10 +571,14 @@ class ConfigObject(object):
         elif isinstance(value, ConfigMap):
             self.__dict__['__ATTRIBUTES__'][key] = value
         elif isinstance(value, dict):
-            child = ConfigObject(key, None)
-            for _key, _value in value.items():
-                child._ingest_(_key, _value)
-            self.addChild(child)
+            if key == 'attributes':
+                for _key, _value in value.items():
+                    self.__dict__['__ATTRIBUTES__'][_key] = _value
+            else:
+                child = ConfigObject(key, None)
+                for _key, _value in value.items():
+                    child._ingest_(_key, _value)
+                self.addChild(child)
         elif isinstance(value, ConfigObject):
             self.__dict__['__CHILDREN__'][key] = value.copy(parent=self)
         else:

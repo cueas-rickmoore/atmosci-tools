@@ -136,79 +136,88 @@ CONFIG.sources.ndfd.variables = {
     '001-003': {
        'maxt':{'grib':'Maximum temperature',
                'description':'12 hr Maximum temperature @ surface',
-               'fill_gaps_with':None, # cannot be fudged
+               'fill_method':None, # cannot be fudged
                'grib_dataset':'maxt',
                'grid_dataset':'maxt',
                'grid_filetype':'tempext',
                'missing':'NaNf', 'type':float, 'units':'K',
-               'time':'minutes', 'count':2, 'span':1440, # 3 24 hour intervals
+               'time':'minutes', 'count':2, 'span':1440, # three 24 hour intervals
         },
        'mint':{'grib':'Minimum temperature',
                'description':'12 hr Minimum temperature @ surface',
-               'fill_gaps_with':None, # cannot be fudged
+               'fill_method':None, # cannot be fudged
                'grib_dataset':'mint',
                'grid_dataset':'mint',
                'grid_filetype':'tempext',
                'missing':'NaNf', 'type':float, 'units':'K',
-               'time':'minutes', 'count':2, 'span':1440, # 2 24 hour intervals
+               'time':'minutes', 'count':2, 'span':1440, # two 24 hour intervals
+        },
+       'pop':{'grib':'Total_precipitation_surface_12_Minute_Accumulation_probability_above_0p254',
+                'description':'Total precipitation',
+                'fill_method':'copy', # same value at each hour in timespan
+                'grib_dataset':'pop12',
+                'grid_dataset':'POP',
+                'grid_filetype':'POP12',
+                'missing':'NaNf', 'type':float, 'units':'kg/m^2',
+                'time':'hours', 'count':8, 'span':12, # eight 12 hour intervals
         },
        'pop12':{'grib':'Total_precipitation_surface_12_Minute_Accumulation_probability_above_0p254',
                 'description':'Total precipitation',
-                'fill_gaps_with':'copy', # same value at each hour
+                'fill_method':'copy', # same value at each hour in timespan
                 'grib_dataset':'pop12',
                 'grid_dataset':'POP',
-                'grid_filetype':'PCPN',
+                'grid_filetype':'POP12',
                 'missing':'NaNf', 'type':float, 'units':'kg/m^2',
-                'time':'hours', 'count':8, 'span':12, # 8 of 12 hour intervals
+                'time':'hours', 'count':8, 'span':12, # eight 12 hour intervals
         },
        'rhm':{'grib':'Relative humidity',
               'description':'Relative humidity @ surface',
-              'fill_gaps_with':'scaled', # by avg from prev hour to fcast hour
+              'fill_method':'scaled', # by avg from prev hour to fcast hour
               'grib_dataset':'rhm',
               'grid_dataset':'RHUM',
               'grid_filetype':'RHUM',
               'missing':'NaNf', 'type':float, 'units':'kg/m^2',
-              # 36 one hour intervals, 6 three hour intervals
+              # 36 one hour intervals, six 3 hour intervals
               'time':'hours', 'count':(36,1), 'span':(1,3),
         },
        'qpf':{'grib':'Total precipitation',
               'description':'6 hour accumulated precipitation @ surface',
               'grid_filetype':'PCPN',
-              'fill_gaps_with':'avg', # distribute average amount evenly
+              'fill_method':'spread', # spread amount/span equally to all hours
               'grib_dataset':'qpf',
               'grid_dataset':'PCPN',
               'grid_filetype':'PCPN',
               'missing':'NaNf', 'type':float, 'units':'kg/m^2',
-              'time':'hours', 'count':9, 'span':6, # 9 six hour intervals
+              'time':'hours', 'count':9, 'span':6, # nine 6 hour intervals
         },
        'td':{'grib':'Dewpoint temperature',
              'description':'Dewpoint temperature @ surface',
-             'fill_gaps_with':'scaled', # by avg from prev hour to fcast hour
+             'fill_method':'scaled', # by avg from prev hour to fcast hour
              'grib_dataset':'td',
              'grid_dataset':'DPT',
              'grid_filetype':'DPT',
              'missing':'NaNf', 'type':float, 'units':'K',
-             # 36 one hour intervals, 6 three hour intervals
+             # 36 one hour intervals, six 3 hour intervals
              'time':'minutes', 'count':(36,6), 'span':(1,3),
         },
        'temp':{'grib':'Temperature',
                'description':'Maximum temperature @ surface',
-               'fill_gaps_with':'scaled', # by avg from fcast hour to prev hour
+               'fill_method':'scaled', # by avg from fcast hour to prev hour
                'grib_dataset':'temp',
                'grid_dataset':'TEMP',
                'grid_filetype':'TEMP',
                'missing':'NaNf', 'type':float, 'units':'K',
-               # 36 one hour intervals, 6 three hour intervals
+               # 36 one hour intervals, six 3 hour intervals
                'time':'minutes', 'count':(36,6), 'span':(1,3),
         },
        'wx':{'grib':'Wx',
              'description':'Weather @ surface',
-             'fill_gaps_with':'copy', # same value at each hour in timespan
+             'fill_method':'copy', # same value at each hour in timespan
              'grib_dataset':'wx',
              'grid_dataset':'WX',
              'grid_filetype':'WX',
-             'missing':'NaNf', 'type':'string', 'units':None,
-             # 36 one hour intervals, one 2 hour interval, 5 3 hour intervals
+             'missing':'', 'type':'string', 'units':None,
+             # 36 one hour intervals, one 2 hour interval, five 3 hour intervals
              'time':'hour', 'count':(36,1,5), 'span':(1,2,3), 
         },
     },
@@ -233,7 +242,7 @@ CONFIG.sources.ndfd.variables = {
         },
        'pop12':{'grib':'Total_precipitation_surface_12_Minute_Accumulation_probability_above_0p254',
                 'description':'Total precipitation',
-                'fill_gaps_with':'copy', # same value at each hour in timespan
+                'fill_method':'copy', # same value at each hour in timespan
                 'grib_dataset':'pop12',
                 'grid_dataset':'POP',
                 'grid_filetype':'PCPN',
@@ -242,39 +251,39 @@ CONFIG.sources.ndfd.variables = {
         },
        'rhm':{'grib':'Relative humidity',
               'description':'Relative humidity @ surface',
-              'fill_gaps_with':'scaled', # by avg from fcast hour to prev hour
+              'fill_method':'scaled', # by avg from fcast hour to prev hour
               'grib_dataset':'rhm',
               'grid_dataset':'RHUM',
               'grid_filetype':'RHUM',
               'missing':'NaNf', 'type':float, 'units':'kg/m^2',
-              'time':'hours', 'count':16, 'span':6, # 16 six hour intervals
+              'time':'hours', 'count':16, 'span':6, # sixteen 6 hour intervals
         },
        'td':{'grib':'Dewpoint temperature',
              'description':'Dewpoint temperature @ surface',
-             'fill_gaps_with':'scaled', # by avg from fcast hour to prev hour
+             'fill_method':'scaled', # by avg from fcast hour to prev hour
              'grib_dataset':'td',
              'grid_dataset':'DPT',
              'grid_filetype':'DPT',
              'missing':'NaNf', 'type':float, 'units':'K',
-             'time':'hours', 'count':16, 'span':6, # 16 six hour intervals
+             'time':'hours', 'count':16, 'span':6, # sixteen 6 hour intervals
         },
        'temp':{'grib':'Temperature',
                'description':'Maximum temperature @ surface',
-               'fill_gaps_with':'scaled', # by avg from fcast hour to prev hour
+               'fill_method':'scaled', # by avg from fcast hour to prev hour
                'grib_dataset':'temp',
                'grid_dataset':'TEMP',
                'grid_filetype':'TEMP',
                'missing':'NaNf', 'type':float, 'units':'K',
-               'time':'hours', 'count':16, 'span':6, # 16 six hour intervals
+               'time':'hours', 'count':16, 'span':6, # sixteen 6 hour intervals
         },
        'wx':{'grib':'Wx',
              'description':'Weather @ surface',
-             'fill_gaps_with':'copy', # same value at each hour in timespan
+             'fill_method':'copy', # same value at each hour in timespan
              'grib_dataset':'wx',
              'grid_dataset':'WX',
              'grid_filetype':'WX',
-             'missing':'NaNf', 'type':'string', 'units':None,
-             'time':'hours', 'count':16, 'span':6, # 16 six hour intervals
+             'missing':'', 'type':'string', 'units':None,
+             'time':'hours', 'count':16, 'span':6, # sixteen 6 hour intervals
         },
     },
 }
@@ -340,8 +349,13 @@ CONFIG.filetypes.DPT = { 'scope':'month',
        'source':'NDFD - National Digial Forecast Database', }
 CONFIG.filetypes.PCPN = { 'scope':'month',
        'content':'Forecast hourly precipition derived from QPF',
-       'datasets':('PCPN','POP','lon','lat','provenance:PCPN:pcpnpop'),
-       'filename':'%(month)s-NDFD-Precipitation.h5',
+       'datasets':('PCPN','lon','lat','provenance:PCPN:timestats'),
+       'filename':'%(month)s-NDFD-Precipitation-(QPF).h5',
+       'source':'NDFD - National Digial Forecast Database', }
+CONFIG.filetypes.POP12 = { 'scope':'month',
+       'content':'Probability of precipition derived from POP12',
+       'datasets':('POP','lon','lat','provenance:POP:timestats'),
+       'filename':'%(month)s-NDFD-Precipitation-Probability.h5',
        'source':'NDFD - National Digial Forecast Database', }
 CONFIG.filetypes.RHUM = { 'scope':'month',
        'content':'Forecast hourly relative humidity',

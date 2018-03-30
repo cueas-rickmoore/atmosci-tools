@@ -7,28 +7,54 @@
 #
 # see copyright.txt file in this directory for details
 
+import os
 import datetime
+ONE_HOUR = datetime.timedelta(hours=1)
 import warnings
 
 import numpy as N
 
 from atmosci.utils import tzutils
-from atmosci.utils.timeutils import lastDayOfMonth
+from atmosci.utils.timeutils import lastDayOfMonth, nextMonth
 
-from atmosci.reanalysis.factory import NdfdGridFileFactory
+from atmosci.ndfd.factory import NdfdGridFileFactory
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class SmartNdfdDataMethods:
 
+    def latestAvailableForecast(self, variable, date_or_time=None):
+        errmsg = 'No "%s" data available for %%s' % variable
+        if date_or_time is None:
+            today = datetime.date.today()
+            next_month = nextMonth(today)
+            filepath = self.ndfdGridFilepath(next_month, variable, self.region)
+            if not os.path.exists(filepath):
+                filepath = self.ndfdGridFilepath(today, variable, self.region)
+                if not os.path.exists(filepath):
+                    when = '%s or %s' % (today.strftime('%M,%Y'),
+                                         next_month.strftime('%M,%Y'))
+                    raise IOError, errmsg % when
+        else:
+            filepath = \
+                self.ndfdGridFilepath(date_or_time, variable, self.region)
+            if not os.path.exists(filepath):
+                raise IOError, errmsg % date_or_time.strftime('%M,%Y')
+
+        Class = self.fileAccessorClass('ndfd_grid', 'read')
+        reader = Class(filepath)
+        last_valid = reader.timeAttribute(variable, 'last_valid_time', None)
+        reader.close()
+        return last_valid
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def slices(self, slice_start_time, slice_end_time):
 
         slices = [ ]
-        start_time = tzutils.tzaDatetime(slice_start_time, self.tzinfo)
-        end_time = tzutils.tzaDatetime(slice_end_time, self.tzinfo)
+        start_time = tzutils.tzaDatetime(slice_start_time, 'UTC')
+        end_time = tzutils.tzaDatetime(slice_end_time, 'UTC')
 
         if start_time.month == end_time.month:
             slices.append((start_time, end_time))
@@ -53,8 +79,8 @@ class SmartNdfdDataMethods:
     def timeSlice(self, variable, slice_start_time, slice_end_time, **kwargs):
         region = kwargs.get('region', self.region)
 
-        slices = self.slices(slice_start_time, slice_end_time)
-        num_hours = tzutils.hoursInTimespan(slices[0][0], slices[-1][1])
+        # find
+        time_slices = self.slices(slice_start_time, slice_end_time)
 
         # filter annoying numpy warnings
         warnings.filterwarnings('ignore',"All-NaN axis encountered")
@@ -64,21 +90,15 @@ class SmartNdfdDataMethods:
         warnings.filterwarnings('ignore',"Mean of empty slice")
         # MUST ALSO TURN OFF WARNING FILTERS AT END OF SCRIPT !!!!!
 
-        data = N.empty((num_hours,)+self.grid_dimensions, dtype=float)
-        data.fill(N.nan)
-
-        units = None
-        prev_indx = 0
-        for first_hour, last_hour in slices:
-            sindx = prev_indx
-            eindx = sindx + tzutils.hoursInTimespan(first_hour, last_hour)
+        data_slices = [ ]
+        for first_hour, last_hour in time_slices:
             reader = \
                 self.ndfdGridFileReader(first_hour, variable, region, **kwargs)
-            data[sindx:eindx,:,:] = \
+            data = \
                 reader.timeSlice(variable, first_hour, last_hour, **kwargs)
-            if sindx == 0:
-                units = reader.datasetAttribute(variable, 'units')
+            units = reader.datasetAttribute(variable, 'units')
             prev_indx = eindx
+            data_slices.append((units,first_hour,data))
 
         # turn annoying numpy warnings back on
         warnings.resetwarnings()
@@ -87,10 +107,10 @@ class SmartNdfdDataMethods:
             lats = reader.lats
             lons = reader.lons
             reader.close()
-            return lons, lats, units, data
+            return lons, lats, data_slices
         else:
             reader.close()
-            return units, data
+            return data_slices
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -98,8 +118,10 @@ class SmartNdfdDataMethods:
 class SmartNdfdGridReader(SmartNdfdDataMethods, NdfdGridFileFactory):
 
     def __init__(self, region, **kwargs):
-        ReanalysisGridFileFactory.__init__(self, **kwargs)
+        NdfdGridFileFactory.__init__(self, **kwargs)
         self.region = region
-        dims = self.source.dimensions[region]
+        source = kwargs.get('source','acis')
+        self.source = self.config.sources[source]
+        dims = self.source.grid_dimensions[region]
         self.grid_dimensions = (dims.lat, dims.lon)
 

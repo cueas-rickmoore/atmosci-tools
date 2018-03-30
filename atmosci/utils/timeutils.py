@@ -165,7 +165,7 @@ def lastDayOfMonth(year_or_date, month=None):
     elif isinstance(year_or_date, int):
         year = year_or_date
     else:
-        errmsg = 'First argument must be int, datetime.date, or'
+        errmsg = 'First argument must be int (for year), datetime.date, or'
         raise TypeError, errmsg + ' datetime.datetime.'
 
     if month in (1,3,5,7,8,10,12):
@@ -175,6 +175,25 @@ def lastDayOfMonth(year_or_date, month=None):
     else:
         if isLeapYear(year): return 29
         return 28
+lastDayInMonth = lastDayOfMonth
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+def nextMonth(date_or_time):
+    year, month, day = date_or_time.timetuple()[:3]
+    # returns first day of the next month
+    if isinstance(date_or_time, datetime.date):
+        if month < 12:
+            return datetime.date(year, month+1, 1)
+        else: return datetime.date(year+1, 1, 1)
+    elif isinstance(date_or_time, datetime.datetime):
+        if month < 12:
+            return datetime.datetime(year, month+1, 1)
+        else: return datetime.datetime(year+1, 1, 1)
+    else:
+        errmsg = 'nextMonth function requires datetime.date or '
+        errmsg += 'datetime.datetime. type(%s) was passed.' 
+        raise TypeError, errmsg % type(date_or_time)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

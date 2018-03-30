@@ -27,11 +27,132 @@ VALID_TIMESPANS = tuple(CONFIG.sources.ndfd.variables.keys())
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 BAD_FILL_METHOD = '"%s" fill method is not supported. Must be one of\n'
-BAD_FILL_METHOD += '"avg", "constant", "scale" or "spread".'
+BAD_FILL_METHOD += '"avg", "constant", "copy", "scaled".'
 BAD_TIMESPAN = '"%s" is not a valid timespan. Must be one of '
 BAD_TIMESPAN += ','.join(['"%s"' % span for span in VALID_TIMESPANS])
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def fillWithAverage(fcast1, fcast2, varconfig, decimals=2):
+    if fcast2 is None: return [ ]
+
+    # make sure forecasts are in the correct order
+    if fcast2 > fcast1:
+        source, base_time, base_grid = fcast1
+        end_grid = fcast2[-1]
+        end_time = fcast2[1]
+    else: # just in case the rules are not followed
+        source, base_time, base_grid = fcast2
+        end_grid = fcast1[-1]
+        end_time = fcast1[1]
+    source = '%s avg' % source
+
+    # number of hours in the gap
+    gap = hoursInTimespan(end_time, base_time, inclusive=False)
+    grid = N.around(base_grid / gap, decimals)
+               
+    filled = [(source, base_time, grid),]
+    for hr in range(1, gap):
+        fcast_time = base_time+datetime.timedelta(hours=hr)
+        filled.append((source, fcast_time, grid))
+
+    return filled
+
+#  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+def fillWithConstant(fcast, dummy, varconfig, decimals=2):
+    # data for each missing hour set to same numeric value
+    source, base_time, base_grid = fcast
+    source = '%s constant' % source
+
+    grid = N.empty(base_grid.shape, base_grid.dtype)
+    grid.fill(varconfig.fill_value)
+
+    filled = [ fcast, ]
+    for hr in range(1, varconfig.span):
+        fcast_time = base_time+datetime.timedelta(hours=hr)
+        filled.append((source, fcast_time, grid))
+
+    return filled
+
+#  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+def fillWithCopy(fcast, dummy, varconfig, decimals=2):
+    # constant : all hours in gap have same values as the fcast
+    # dummy only exists for compatability
+    source, base_time, grid = fcast
+    filled = [(source, base_time, grid),]
+    source = '%s copy' % source
+    for hr in range(1, varconfig.span):
+        fcast_time = base_time+datetime.timedelta(hours=hr)
+        filled.append((source, fcast_time, grid))
+
+    return filled
+
+#  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+def scaledFill(fcast1, fcast2, varconfig, decimals=2):
+    # scale : increment each hour in the gap by the average
+    #         difference b/w end time and base time data values
+    if fcast2 is None: return [ ]
+
+    # make sure forecasts are in the correct order
+    if fcast2 > fcast1:
+        source, base_time, base_grid = fcast1
+        end_grid = fcast2[-1]
+        end_time = fcast2[1]
+    else: # just in case the rules are not followed
+        source, base_time, base_grid = fcast2
+        end_grid = fcast1[-1]
+        end_time = fcast1[1]
+
+    # number of hours in the gap
+    gap = hoursInTimespan(end_time, base_time, inclusive=False)
+    avg_grid = N.around((end_grid-base_grid) / gap, decimals)
+
+    source = fcast1[0]
+    filled = [ (source, base_time, base_grid) ]
+
+    source = '%s scaled' % source
+    for hr in range(1, gap):
+        fcast_time = base_time+datetime.timedelta(hours=hr)
+        grid = base_grid + (avg_grid * hr)
+        filled.append((source, fcast_time, grid))
+
+    return filled
+
+#  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+def spreadFill(fcast1, dummy, varconfig, decimals=2):
+    # spread : divide incoming by num hours in span  
+    source, base_time, base_grid = fcast1
+    source = '%s spread' % source
+
+    # number of hours in the gap
+    hours = varconfig.span
+    zeros = N.where(base_grid < 0.01)
+    grid = N.around((base_grid) / hours, decimals)
+    grid[zeros] = 0;
+
+    filled = [ (source, base_time, grid) ]
+
+    for hr in range(1, hours):
+        fcast_time = base_time+datetime.timedelta(hours=hr)
+        filled.append((source, fcast_time, grid))
+
+    return filled
+
+#  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+GridFillMethods = {
+    'avg': fillWithAverage,
+    'constant': fillWithConstant,
+    'copy': fillWithCopy,
+    'scaled': scaledFill,
+    'spread': spreadFill,
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def hoursInTimespan(time1, time2, inclusive=True):
     if time1 > time2: diff = (time1 - time2)
@@ -95,8 +216,8 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
             self.gribToGridParameters(grid_source, grid_region)
 
         # check whether varible supports filling gaps between records
-        var_config = self.variableConfig(variable, timespan)
-        fill_method = var_config.get('fill_gaps_with', None)
+        varconfig = self.variableConfig(variable, timespan)
+        fill_method = varconfig.get('fill_method',None)
 
         # code for filling gaps between records
         if fill_gaps and fill_method is not None:
@@ -115,10 +236,10 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
                                        grid_shape_2D, grid_mask)
                     next_record = ('ndfd',asUTCTime(first_msg.validDate),grid)
                     data_records.extend(self.fillTimeGap(prev_record,
-                                             next_record, fill_method))
+                                             next_record, varconfig))
 
                 # update with records for the current timespan
-                data = self.dataWithoutGaps(messages, fill_method, missing,
+                data = self.dataWithoutGaps(messages, varconfig,
                             grib_indexes, grid_shape_2D, grid_mask, debug)
                 data_records.extend(data)
 
@@ -132,7 +253,6 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
         
         # code that preserves gaps between records
         else:
-
             for timespan in timespans:
                 self.openGribFile(fcast_date, variable, timespan, grib_region)
                 # retrieve pointers to all messages in the file
@@ -155,11 +275,13 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def dataWithoutGaps(self, messages, fill_method, missing, grib_indexes,
+    def dataWithoutGaps(self, messages, varconfig, grib_indexes,
                               grid_shape_2D, grid_mask, debug=False):
         data_records = [ ]
 
         first_msg = messages[0]
+        missing = float(first_msg.missingValue)
+
         prev_grid = reshapeGrid(first_msg, missing, grib_indexes,
                                 grid_shape_2D, grid_mask)
         prev_time = asUTCTime(first_msg.validDate)
@@ -181,24 +303,19 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
             gap = hoursInTimespan(prev_time, this_time, inclusive=False)
             if gap > 1:
                 records = \
-                    self.fillTimeGap(prev_record, this_record, fill_method)
-                # check whether previous record was replaced
-                # if the list comprehension is empty, it needs to be added
-                if not [rec for rec in records if rec[1] == prev_record[1]]:
-                    data_records.append(prev_record)
+                    self.fillTimeGap(prev_record, this_record, varconfig)
                 # add the gap records
                 data_records.extend(records)
-                # there is an open gap
-                open_gap = True
             else: # no gap, add previous record
                 data_records.append(prev_record)
-                open_gap = False
 
             prev_record = this_record
             prev_time = this_time
 
-        if not open_gap: # at this point prev_record == last this_record
-            data_records.append(prev_record)
+        # at this point prev_record == last this_record
+        records = self.fillTimeGap(prev_record, None, varconfig)
+        if len(records) > 0: data_records.extend(records)
+        else: data_records.append(prev_record)
 
         if debug:
             msg = messages[-1]
@@ -210,67 +327,20 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def fillTimeGap(self, fcast1, fcast2, fill_method, decimals=2):
-        # Assume both forecasts have the same source source
-        base_source = fcast1[0]
+    def fillTimeGap(self, fcast1, fcast2, varconfig, decimals=2):
+        fill = GridFillMethods.get(varconfig.fill_method, None)
+        if fill is None: return [fcast1, fcast2]
 
-        # Assume that the goal is to fill a time gap bewtween the
-        # earlier time and the later time. So make sure we get the 
-        # forecasts in the correct order.
-        if fcast2 > fcast1:
-            base_grid = fcast1[-1]
-            base_time = fcast1[1]
-            end_grid = fcast2[-1]
-            end_time = fcast2[1]
-        else: # just in case the rules are not followed
-            base_grid = fcast2[-1]
-            base_time = fcast2[1]
-            end_grid = fcast1[-1]
-            end_time = fcast1[1]
+        if fcast2 is None: # don't have the next forcast
+            # fill method might allow extrapolation
+            # otherwise it will return an empty record set
+            return fill(fcast1, fcast2, varconfig, decimals)
 
         # number of hours in the gap
-        num_hours = hoursInTimespan(end_time, base_time, inclusive=False)
-
-        gap = [ ]
-        if num_hours > 1:
-            # avg : all hours in the gap are filled by the average
-            #       caclulated by dividing base time by number of hours
-            # NOTE: the base fcast data is also replaced by the average
-            if fill_method == 'avg':
-                avg_grid = N.around(base_grid / num_hours, decimals)
-                gap.append(('%s* avg' % base_source, base_time, avg_grid))
-                source = '%s avg' % base_source
-                for hr in range(1, num_hours):
-                    gap.append((source, base_time+datetime.timedelta(hours=hr),
-                                avg_grid))
-            # constant : all hours in gap have same values as the base time 
-            elif fill_method == 'copy':
-                gap.append((base_source, base_time, base_grid))
-                source = '%s copy' % base_source
-                for hr in range(1, num_hours):
-                    gap.append((source, base_time+datetime.timedelta(hours=hr),
-                                base_grid))
-            # scale : increment each hour in the gap by the average
-            #         difference b/w end time and base time data values
-            elif fill_method == 'scaled':
-                gap.append((base_source, base_time, base_grid))
-                avg_grid = N.around((end_grid-base_grid) / num_hours, decimals)
-                source = '%s scaled' % base_source
-                for hr in range(1, num_hours):
-                    gap.append((source, base_time+datetime.timedelta(hours=hr),
-                                base_grid + (avg_grid * hr)))
-            # forced : each node in each hour set to same numeric value
-            elif isinstance(fill_method, (int, float)):
-                grid = N.empty(base_grid.shape, base_grid.dtype)
-                grid.fill(fill_method)
-                source = '%s forced' % base_source
-                for hr in range(num_hours):
-                    gap.append((source, base_time+datetime.timedelta(hours=hr),
-                                grid))
-            else:
-                raise ValueError, BAD_FILL_METHOD % fill_method
-
-        return gap
+        gap = hoursInTimespan(fcast1[1], fcast2[1], inclusive=False)
+        if gap > 1:
+            return fill(fcast1, fcast2, varconfig, decimals)
+        return [fcast1, fcast2]
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -295,80 +365,38 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
 
         Assumes file contains a range of time periods for a single variable.
         """
-        self.openGribFile(fcast_date, variable, timespan, grib_region)
-        # retrieve pointers to all messages in the file
-        messages = self.gribs.select()
+        varconfig = self.variableConfig(variable, timespan)
 
-        first_msg = messages[0]
-        first_hour = first_msg.validDate
-        missing = float(first_msg.missingValue)
-        units = first_msg.units
+        records = self.dataForRegion(fcast_date, variable, timespans,
+                       grib_region, grid_region, grid_source, fill_gaps,
+                       graceful_fail, debug)
 
-        if debug:
-            print '\nfirst message :'
-            print '    anal date :', first_msg.analDate
-            print 'forecast hour :', first_msg.forecastTime
-            print 'forecast date :', first_hour
-            print 'missing value :', missing
-            print '        units :', units
-            print '\n 2nd message :'
-            print '    anal date :', messages[1].analDate
-            print 'forecast hour :', messages[1].forecastTime
-            print 'forecast date :', messages[1].validDate
-            print '\nlast message :', len(messages)
-            print '    anal date :', messages[-1].analDate
-            print 'forecast hour :', messages[-1].forecastTime
-            print 'forecast date :', messages[-1].validDate
-         
-        num_hours = hoursInTimespan(messages[-1].validDate, first_hour, True)
-        if debug:
-            print '    time span :', num_hours
-            print '\n'
+        first_hour = records[0][1]
+        last_hour = records[-1][1]
+        num_hours = hoursInTimespan(last_hour, first_hour, inclusive=True)
 
-        # parameters for reshaping the grib arrays
-        grid_shape_2D, grib_indexes, grid_mask = \
-            self.gribToGridParameters(grid_source, grid_region)
-
+        grid_shape_2d = records[0][-1].shape
         grid = N.empty((num_hours,)+grid_shape_2D, dtype=float)
         grid.fill(N.nan)
 
-        times = [ ]
-        prev_time = first_hour
-        prev_index = None
-        for msg in messages:
-            values = reshapeGrid(msg, missing_value, grib_indexes,
-                                 grid_shape_2D, grid_mask)
-            next_time = msg.validDate
-            next_index = hoursInTimespan(next_time, first_hour, inclusive=False)
-            grid[next_index,:,:] = values
-            next_record = ('ndfd', next_time, values)
-
-            if fill_gaps and prev_index:
-                fill = self.variableConfig(variable, timespan).fill_gaps_with
-                gap_info = self.fillTimeGap(prev_record, next_record, fill)
-                for src, fcast_time, values in gap_info:
-                    index = hoursInTimespan(fcast_time, prev_time, False)
-                    grid[index,:,:] = values
-                    if debug: print '     gap date :', index, fcast_time
-            if debug: print 'forecast date :', next_index, next_time
-
-            prev_record = next_record
-            prev_index = next_index
-
-        gribs.close()
-
-        return asUTCTime(first_hour), units, grid
+        for index, record in enumerate(records):
+            grid[index,:,:] = record[-1]
+        
+        return first_hour, varconfig.units, grid
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def closeGribfile(self):
-        self.gribs.close()
-        self.gribs = None
+        if self.gribs is not None:
+            self.gribs.close()
+            self.gribs = None
 
     def openGribFile(self, fcast_date, variable, timespan, region, **kwargs):
         if self.gribs != None: self.closeGribfile()
         grib_filepath = self.ndfdGribFilepath(fcast_date, variable, timespan,
                                               region, **kwargs)
+        if not os.path.exists(grib_filepath):
+            raise ValueError, grib_filepath
         self.gribs = pygrib.open(grib_filepath)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -420,4 +448,12 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
     #    values ... return data values as a NumPy array
     #
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def scanGridFile(self, fcast_date, variable, timespan):
+        self.openGribFile(fcast_date, variable, timespan, 'conus')
+        for message in self.gribs.select():
+            print '\n    grib name :', message.name
+            print '    anal date :', message.analDate
+            print 'forecast hour :', message.forecastTime
+            print 'forecast time :', message.validDate
 
