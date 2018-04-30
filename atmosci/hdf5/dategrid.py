@@ -7,7 +7,7 @@ import datetime
 import numpy as N
 
 from atmosci.utils.timeutils import asDatetime, asDatetimeDate
-from atmosci.utils.timeutils import dateAsString, matchDateType
+from atmosci.utils.timeutils import matchDateType
 
 from atmosci.hdf5.grid import Hdf5GridFileReader, Hdf5GridFileManager
 from atmosci.hdf5.grid import Hdf5GridFileBuilder
@@ -21,6 +21,10 @@ TIME_SPAN_ERROR += 'Either "date" OR "start_date" plus "end_date" are required.'
 
 #class Hdf5DateGridReaderMixin(object):
 class Hdf5DateGridReaderMixin:
+
+
+    def dateAsString(self, date_obj):
+        return date_obj.strftime('%Y-%m-%d')
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     
@@ -106,6 +110,13 @@ class Hdf5DateGridReaderMixin:
         self._slice3DDataset(dataset, start, end, min_y, max_y, min_x, max_x)
         return self._processDataOut(dataset_path, data, **kwargs)
     get3DSlice = dataSlice # backwards compatibility
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def fileDateAttribute(self, attribute_name, default=None):
+        date = self.fileAttribute(attribute_name, default)
+        if date != default: return asDatetimeDate(date)
+        return default
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -245,6 +256,31 @@ class Hdf5DateGridReaderMixin:
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+class Hdf5DateGridFileReader(Hdf5DateGridReaderMixin, Hdf5GridFileReader):
+    """ Provides read-only access to 3D gridded data in HDF5 files where
+    the first dimension is time, the 2nd dimension is rows and the 3rd
+    dimension is columns. Grids can contain any type of data. Indexing
+    based on Time/Latitude/Longitude is available. Time indexes may be
+    derived from date/time with earliest date at index 0. Row indexes
+    may be derived from Latitude coordinates with minimum Latitude at
+    row index 0. Columns indexes may be derived from Longitude
+    coordinates with minimum Longitude at column index 0.
+
+    Inherits all of the capabilities of Hdf5GridFileReader
+    """
+
+    def __init__(self, hdf5_filepath):
+        Hdf5GridFileReader.__init__(self, hdf5_filepath)
+
+    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
+
+    def _loadManagerAttributes_(self):
+        Hdf5GridFileReader._loadManagerAttributes_(self)
+        self._loadDateGridAttributes_()
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 class Hdf5DateGridManagerMixin(Hdf5DateGridReaderMixin):
     """ Provides read/write access to 3D gridded data in HDF5 files where
     the first dimension is time, the 2nd dimension is rows and the 3rd
@@ -265,14 +301,14 @@ class Hdf5DateGridManagerMixin(Hdf5DateGridReaderMixin):
 
     def insertByDate(self, dataset_path, data, start_date, **kwargs):
         date_index = self.indexForDate(dataset_path, start_date)
-        self._insertByDateIndex(dataset_path, data, date_index, **kwargs)
+        return self._insertByDateIndex(dataset_path, data, date_index, **kwargs)
 
     def insertAtNodeByDate(self, dataset_path, data, start_date, lon, lat,
                                  **kwargs):
         date_index = self.indexForDate(dataset_path, start_date)
         y, x = self.ll2index(lon, lat)
-        self._insertDateAtNodeByDateIndex(dataset_path, data, date_index, x, y,
-                                          **kwargs)
+        return self._insertAtNodeByDateIndex(dataset_path, data, date_index,
+                                             x, y, **kwargs)
 
     def insert3DSlice(self, dataset_path, data, start_date, min_lon, max_lon,
                             min_lat, max_lat, **kwargs):
@@ -291,16 +327,22 @@ class Hdf5DateGridManagerMixin(Hdf5DateGridReaderMixin):
         errmsg = 'Cannot insert data with %dD data into %dD dataset by date.'
         data_in = self._processDataIn(dataset_path, data, **kwargs)
 
+        # most options below insert only 1 day 
+        num_days = 1
+
         dataset = self.getDataset(dataset_path)
         dataset_dims = len(dataset.shape)
         if dataset_dims == 3:
             if data_in.ndim == 3:
                 end_index = date_index + data.shape[0]
                 dataset[date_index:end_index] = data_in
+                # this is only case that inserts data for multiple days
+                num_days = data.shape[0]
             elif data.ndim == 2:
                 dataset[date_index,:,:] = data_in
             else:
                 raise ValueError, errmsg % (data.ndim, dataset_dims)
+
         elif dataset_dims == 1:
             if isinstance(data_in, N.ndarray):
                 if data_in.ndim == 1:
@@ -316,6 +358,12 @@ class Hdf5DateGridManagerMixin(Hdf5DateGridReaderMixin):
         else:
             raise ValueError, errmsg % (data.ndim, dataset_dims)
 
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
+
+        return num_days
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _insertAtNodeByDateIndex(self, dataset_path, data, date_index, x, y,
@@ -325,12 +373,22 @@ class Hdf5DateGridManagerMixin(Hdf5DateGridReaderMixin):
         dataset[date_index:end_index, y, x] = \
             self._processDataIn(dataset_path, data, **kwargs)
 
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
+
+        return data.shape[0]
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _insert3DSlice(self, dataset_path, data, start, min_y, max_y,
-                             min_x, max_x):
-        if data.dims == 2: end = start
-        elif data.dims == 3: end = start + data.shape[0]
+                             min_x, max_x, **kwargs):
+        if data.dims == 2:
+            num_days = 1
+            end = start
+        elif data.dims == 3:
+            num_days = data.shape[0]
+            end = start + num_days
         else:
             errmsg = 'Cannot insert %dD data into a 3D dataset.'
             raise ValueError, errmsg % data.dims
@@ -403,30 +461,11 @@ class Hdf5DateGridManagerMixin(Hdf5DateGridReaderMixin):
                 else: # max_x >= dataset.shape[2]
                     dataset[start:, min_y:, min_x:] = data
 
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-class Hdf5DateGridFileReader(Hdf5DateGridReaderMixin, Hdf5GridFileReader):
-    """ Provides read-only access to 3D gridded data in HDF5 files where
-    the first dimension is time, the 2nd dimension is rows and the 3rd
-    dimension is columns. Grids can contain any type of data. Indexing
-    based on Time/Latitude/Longitude is available. Time indexes may be
-    derived from date/time with earliest date at index 0. Row indexes
-    may be derived from Latitude coordinates with minimum Latitude at
-    row index 0. Columns indexes may be derived from Longitude
-    coordinates with minimum Longitude at column index 0.
-
-    Inherits all of the capabilities of Hdf5GridFileReader
-    """
-
-    def __init__(self, hdf5_filepath):
-        Hdf5GridFileReader.__init__(self, hdf5_filepath)
-
-    # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
-
-    def _loadManagerAttributes_(self):
-        Hdf5GridFileReader._loadManagerAttributes_(self)
-        self._loadDateGridAttributes_()
+        return num_days
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -469,8 +508,8 @@ class Hdf5DateGridFileBuilder(Hdf5DateGridManagerMixin, Hdf5GridFileBuilder):
         self.preInitDates(start_date, end_date)
         Hdf5GridFileBuilder.__init__(self, hdf5_filepath, lons, lats, mode)
         # set the time span for this file
-        self.setFileAttributes(start_date=dateAsString(start_date),
-                               end_date=dateAsString(end_date))
+        self.setFileAttributes(start_date=self.dateAsString(start_date),
+                               end_date=self.dateAsString(end_date))
         # close the file to make sure attributes are saved
         self.close()
         # reopen the file in append mode

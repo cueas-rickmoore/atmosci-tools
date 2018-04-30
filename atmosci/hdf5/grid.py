@@ -427,6 +427,11 @@ class Hdf5GridFileManager(Hdf5FileManager, Hdf5GridFileMixin):
                 if max_x < dataset.shape[1]:
                     dataset[min_y:, min_x:max_x] = data
                 else: dataset[min_y:, min_x:] = data
+
+            # always track time updated
+            timestamp = kwargs.get('timestamp', self.timestamp)
+            self.setDatasetAttribute(dataset_name, 'updated', timestamp)
+
         else:
             errmsg = 'Coordinate bounding box has not been defined.'
             raise AttributeError, errmsg
@@ -455,6 +460,10 @@ class Hdf5GridFileManager(Hdf5FileManager, Hdf5GridFileMixin):
                 dataset[min_y:, min_x:max_x] = data
             else: # max_x >= dataset.shape[1]
                 dataset[min_y:, min_x:] = data
+
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_name, 'updated', timestamp)
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 

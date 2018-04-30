@@ -26,7 +26,15 @@ MONTH_NAMES = ('January','February','March','April','May','June','July',
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def elapsedTime(start_time, as_string=False):
+def microsecondPrecision(miscoseconds, precision):
+    ms_string = '%d' % miscoseconds
+    if precision < len(ms_string):
+        return ms_string[:precision]
+    return ms_string
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def elapsedTime(start_time, as_string=False, precision=2):
     elapsed_time = datetime.datetime.now() - start_time
     if as_string:
         seconds = elapsed_time.seconds
@@ -35,19 +43,23 @@ def elapsedTime(start_time, as_string=False):
             hours = seconds / 3600
             remainder = seconds % 3600
             minutes = remainder / 60
+            if minutes == 1: minutes = '1 minute'
+            else: minutes = '%d minutes' % minutes
             seconds = remainder % 60
-            if hours == 1:
-                msg = '%d hour %d mins %d.%06d secs'
-            else:
-                msg = '%d hours %d minutes %d.%06d seconds'
-            return msg % (hours, minutes, seconds, microseconds)
+            if hours == 1: msg = '%d hour %s %d.%s seconds'
+            else: msg = '%d hours %s %d.%s seconds'
+            ms = microsecondPrecision(microseconds, precision)
+            return msg % (hours, minutes, seconds, ms)
         elif seconds > 60:
             minutes = seconds / 60
             seconds = seconds % 60
-            msg = '%d minutes %d.%06d seconds'
-            return msg % (minutes, seconds, microseconds)
+            if minutes == 1: msg = '%d minute %d.%s seconds'
+            else: msg = '%d minutes %d.%s seconds'
+            ms = microsecondPrecision(microseconds, precision)
+            return msg % (minutes, seconds, ms)
         else:
-            return '%d.%06d seconds.' % (seconds, microseconds)
+            ms = microsecondPrecision(microseconds, precision)
+            return '%d.%s seconds' % (seconds, ms)
     else: return elapsed_time
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #

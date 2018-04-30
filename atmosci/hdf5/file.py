@@ -2,7 +2,7 @@
 """
 
 import os
-from datetime import datetime
+import datetime
 
 import h5py
 import numpy as N
@@ -207,6 +207,14 @@ class Hdf5FileReader(Hdf5DataReaderMixin, object):
         return self._getDatasetAttribute_(self.file, dataset_path, 'units',
                                           default)
     getDatasetUnits = datasetUnits
+
+    def lastUpdate(self, dataset_path, default=BOGUS_VALUE):
+        updated = self.datasetAttribute(dataset_path, 'updated', default)
+        if updated == default or updated == 'never': return default
+        date, time_ = updated.split(' ')
+        date = [int(d) for d in date.split('-')]
+        time_ = [int(t) for t in time_.split(':')]
+        return datetime.datetime(*tuple(date + time_))
 
     def listDatasets(self):
         return self.listDatasetsIn('__file__')
@@ -638,6 +646,8 @@ class Hdf5FileManager(Hdf5DataWriterMixin, Hdf5FileReader):
 
     def updateDataset(self, dataset_path, numpy_array, attributes={}, **kwargs):
         self.assertFileWritable()
+        if 'updated' not in attributes:
+            attributes['updated'] = self.timestamp
         
         name, parent = self._pathToNameAndParent(self.file, dataset_path)
         if name in self.dataset_names:

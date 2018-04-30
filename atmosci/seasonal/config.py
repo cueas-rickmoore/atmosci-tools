@@ -60,6 +60,7 @@ ConfigObject('project', COMMON)
 COMMON.project.bbox = { 'NE':COMMON.regions.NE.data,
                         'conus':COMMON.regions.conus.data }
 COMMON.project.compression = 'gzip'
+COMMON.project.dst_glitch = (3,10)
 COMMON.project.forecast = 'ndfd'
 COMMON.project.region = 'conus'
 COMMON.project.source = 'acis'

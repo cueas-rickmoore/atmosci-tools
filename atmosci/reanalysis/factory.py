@@ -1,6 +1,9 @@
 
 import os
 import datetime
+ONE_HOUR = datetime.timedelta(hours=1)
+
+import numpy as N
 
 from atmosci.utils import tzutils
 from atmosci.utils.timeutils import lastDayOfMonth
@@ -386,19 +389,6 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def fileAccessorClass(self, access_type):
-        Classes = self.AccessClasses.get(self.analysis, None)
-        if Classes is None:
-            errmsg = 'No file accessors are registered for "%s"' 
-            raise KeyError, errmsg % self.analysis
-        accessor = Classes.get(access_type, None)
-        if accessor is None:
-            errmsg = 'No file %s accessor registered for "%s"' 
-            raise KeyError, errmsg % (access_type, self.analysis)
-        return accessor
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
     def gridFileBuilder(self, reference_time, variable, region, timezone,
                               lons=None, lats=None, **kwargs):
         filepath = kwargs.get('filepath', None)
@@ -408,24 +398,31 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
         kwargs['timezone'] = timezone
         kwargs.update(self._extractTimes(reference_time, **kwargs))
         del kwargs['timezone']
-        Class = self.fileAccessorClass('build')
+        Class = self.fileAccessorClass('reanalysis', 'build')
         return Class(filepath, CONFIG, variable, region, self.source,
                      reference_time, timezone, lons, lats, kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def gridFileExists(self, reference_time, variable, region, **kwargs):
+        filepath = self.analysisGridFilepath(reference_time, variable,
+                                             region, **kwargs)
+        return os.path.exists(filepath)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def gridFileManager(self, reference_time, variable, region, **kwargs):
         filepath = self.analysisGridFilepath(reference_time, variable,
                                              region, **kwargs)
-        Class = self.fileAccessorClass('manage')
-        return Class(filepath, kwargs.get('mode','r'))
+        Class = self.fileAccessorClass('reanalysis', 'manage')
+        return Class(filepath, kwargs.get('mode','a'))
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def gridFileReader(self, reference_time, variable, region, **kwargs):
         filepath = self.analysisGridFilepath(reference_time, variable,
                                              region, **kwargs)
-        Class = self.fileAccessorClass('read')
+        Class = self.fileAccessorClass('reanalysis', 'read')
         return Class(filepath)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -506,6 +503,9 @@ class ReanalysisGridFactoryMethods(ReanalysisFactoryMethods):
         if not hasattr(self, 'AccessClasses'):
             self.AccessClasses = ConfigObject('AccessClasses', None)
 
+        from atmosci.seasonal.static import StaticGridFileReader
+        self._registerAccessManager('static', 'read', StaticGridFileReader)
+
         from atmosci.reanalysis.grid import ReanalysisGridFileReader, \
                                             ReanalysisGridFileManager, \
                                             ReanalysisGridFileBuilder
@@ -539,9 +539,9 @@ class ReanalysisGridFileFactory(StaticFileAccessorMethods,
                                 timezone):
         builder = self.gridFileBuilder(reference_time, variable, grid_region,
                                        timezone, None, None)
-        region = factory.regionConfig(grid_region)
-        source = factory.sourceConfig('acis')
-        reader = factory.staticFileReader(source, region)
+        region = self.regionConfig(grid_region)
+        source = self.sourceConfig('acis')
+        reader = self.staticFileReader(source, region)
         lats = reader.getData('lat')
         lons = reader.getData('lon')
         reader.close()
@@ -553,4 +553,55 @@ class ReanalysisGridFileFactory(StaticFileAccessorMethods,
         print '\nBuilt "%s" reanalysis grid file :' % variable
         print '    ', builder.filepath
         builder.close()
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def repairMissingReanalysis(self, error_time, variable, region):
+        prev_time = error_time - ONE_HOUR
+        prev_time_str = prev_time.strftime('%Y-%m-%d:%H')
+        if not self.gridFileExists(prev_time, variable, region):
+            errmsg = 'Repair failed, file for previous hour (%s) does not exist.'
+            return False, errmsg % prev_time_str
+
+        next_time = error_time + ONE_HOUR
+        next_time_str = next_time.strftime('%Y-%m-%d:%H')
+        if not self.gridFileExists(next_time, variable, region):
+            errmsg = 'Repair failed, file for next hour (%s) does nto exist.'
+            return False, errmsg % next_time_str
+
+        reader = self.gridFileManager(prev_time, variable, region)
+        prev_grid = reader.dataForHour(variable, prev_time)
+        num_nans = len(N.where(N.isnan(prev_grid))[0])
+        if num_nans == N.product(prev_grid.shape):
+            errmsg = 'Repair failed, data also missing for previous hour (%s).'
+            return False, errmsg % prev_time_str
+
+        if next_time.month != prev_time.month:
+            reader.close()
+            reader = self.gridFileManager(next_time, variable, region)
+        next_grid = reader.dataForHour(variable, prev_time)
+        reader.close()
+        del reader
+
+        num_nans = len(N.where(N.isnan(prev_grid))[0])
+        if num_nans == N.product(next_grid.shape):
+            errmsg = 'Repair failed, data also missing for next hour (%s).'
+            return False, errmsg % next_time_str
+
+        fudged = (prev_grid + next_grid) / 2.
+        if variable.lower() == 'pcpn':
+            nans = N.where(N.isnan(fudged))
+            prev_grid[nans] = 0.
+            fudged[N.where(prev_grid < 0.02)] = 0.
+            next_grid[nans] = 0.
+            fudged[N.where(next_grid < 0.02)] = 0.
+            fudged[nans] = N.nan
+
+        manager = self.gridFileManager(error_time, variable, region)
+        manager.updateDataFromSource(variable, 'fudged', error_time, fudged)
+
+        times = (prev_time_str, next_time_str)
+        return True, 'Missing data repaired using data from %s and %s.' % times
+
+
 

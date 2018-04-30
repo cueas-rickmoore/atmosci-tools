@@ -1,11 +1,15 @@
 
 import os, sys
+import warnings
 
 from dateutil.relativedelta import relativedelta
 ONE_DAY = relativedelta(days=1)
 
 import numpy as N
 import PIL.Image
+
+# ignore matplotlib loading fonts warning
+warnings.filterwarnings("ignore")
 
 import matplotlib
 matplotlib.use("Agg")

@@ -38,7 +38,6 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
     def dataForHour(self, variable, grib_hour, **kwargs):
         debug = kwargs.get('debug', False)
-        verbose = kwargs.get('verbose', False)
         return_units = kwargs.get('return_units', False)
 
         found, reader = self.readerForHour(variable, grib_hour)
@@ -62,10 +61,9 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
             return False, (why, grib_hour, reader.filepath)
 
         units = message.units
-        if verbose:
+        if debug:
             time_str = grib_hour.strftime('%Y-%m-%d:%H')
             print 'processing reanalysis grib for', time_str
-        elif debug:
             print 'message retrieved :\n    ', message
             print '\n            grib_time :', message.dataTime
             print '             analDate :', message.analDate
@@ -166,49 +164,58 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
     def timeSlice(self, variable, slice_start_time, slice_end_time, **kwargs):
         failed = [ ]
 
-        if self.grib_indexes is None: self._initStaticResouces_()
+        if self.grib_indexes is None: self._initStaticResources_()
 
         region = kwargs.get('region', self.region)
-        verbose = kwargs.get('verbose', False)
         
         grib_start_time = tzutils.tzaDatetime(slice_start_time, self.tzinfo)
-        grib_end_time = tzutils.tzaDatetime(slice_end_time, self.tzinfo)
+        if slice_end_time > slice_start_time:
+            grib_end_time = tzutils.tzaDatetime(slice_end_time, self.tzinfo)
 
-        # a requested end time is not necessarily available
-        # so strip off missing hours from end of time span
-        while grib_end_time >= grib_start_time:
-            filepath = self.gribFilepath(grib_end_time, variable, region)
-            if os.path.exists(filepath): break
-            grib_end_time -= ONE_HOUR
+            # a requested end time is not necessarily available
+            # so strip off missing hours from end of time span
+            while grib_end_time >= grib_start_time:
+                filepath = self.gribFilepath(grib_end_time, variable, region)
+                if os.path.exists(filepath): break
+                grib_end_time -= ONE_HOUR
 
-        num_hours = tzutils.hoursInTimespan(grib_start_time, grib_end_time)
-        data = N.empty((num_hours,)+self.grid_dimensions, dtype=float)
-        data.fill(N.nan)
+            num_hours = tzutils.hoursInTimespan(grib_start_time, grib_end_time)
+            data = N.empty((num_hours,)+self.grid_dimensions, dtype=float)
+            data.fill(N.nan)
 
-        units = None
-        date_indx = 0
-        grib_time = grib_start_time
-        while units is None and grib_time <= grib_end_time:
-            success, package = self.dataForHour(variable, grib_time,
+            units = None
+            date_indx = 0
+            grib_time = grib_start_time
+            while units is None and grib_time <= grib_end_time:
+                success, package = self.dataForHour(variable, grib_time,
+                                        return_units=True, **kwargs)
+                if success:
+                    units, data_for_hour = package
+                    data[date_indx,:,:] = data_for_hour
+                else: failed.append(package)
+
+                grib_time += ONE_HOUR
+                date_indx += 1
+
+            while grib_time <= grib_end_time:
+                OK, package = self.dataForHour(variable, grib_time, **kwargs)
+                if OK: data[date_indx,:,:] = package
+                else: failed.append(package)
+
+                grib_time += ONE_HOUR
+                date_indx += 1
+
+        else:
+            success, package = self.dataForHour(variable, grib_start_time,
                                                 return_units=True, **kwargs)
-            if success:
-                units, data_for_hour = package
-                data[date_indx,:,:] = data_for_hour
-            else: failed.append(package)
-
-            grib_time += ONE_HOUR
-            date_indx += 1
-
-        while grib_time <= grib_end_time:
-            success, package = \
-                self.dataForHour(variable, grib_time, **kwargs)
-            if success: data[date_indx,:,:] = package
-            else: failed.append(package)
-
-            grib_time += ONE_HOUR
-            date_indx += 1
+            if not success:
+                data = N.empty(self.grid_dimensions, dtype=float)
+                units = None
+                failed.append(package)
+            else: units, data = package 
 
         return units, data, tuple(failed)
+
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -235,7 +242,7 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _initStaticResouces_(self):
+    def _initStaticResources_(self):
         reader = self.staticFileReader(self.grid_source, self.grid_region)
         self.grid_shape, self.grib_indexes = reader.gribSourceIndexes('ndfd')
         # get the region boundary mask
