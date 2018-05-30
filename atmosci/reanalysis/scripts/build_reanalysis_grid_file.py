@@ -8,10 +8,6 @@ from atmosci.reanalysis.factory import ReanalysisGridFileFactory
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-from atmosci.reanalysis.config import CONFIG
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
 from optparse import OptionParser
 parser = OptionParser()
 
@@ -86,7 +82,7 @@ if verbose:
     print '    timezone :', file_timezone
 
 # create a factory for access to grid files
-factory = ReanalysisGridFileFactory(CONFIG, timezone=file_timezone)
+factory = ReanalysisGridFileFactory(timezone=file_timezone)
 if dev_mode: factory.useDirpathsForMode('dev')
 
 # look for overrides of the default timespan parameters

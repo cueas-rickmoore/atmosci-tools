@@ -3,6 +3,8 @@ import os
 import datetime
 ONE_HOUR = datetime.timedelta(hours=1)
 
+import requests
+
 import numpy as N
 import pygrib
 
@@ -11,36 +13,30 @@ from atmosci.utils.timeutils import lastDayOfMonth
 
 from atmosci.seasonal.methods.static  import StaticFileAccessorMethods
 
-from atmosci.reanalysis.factory import ReanalysisGribFactoryMethods
+from atmosci.reanalysis.factory import ReanalysisGribFactoryMethods, \
+                                       ReanalysisGridFactoryMethods, \
+                                       ReanalysisFactoryMethods
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-from atmosci.reanalysis.config import CONFIG
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-class SmartReanalysisGribMethods(StaticFileAccessorMethods):
+class SmartReanalysisGribMethods:
 
     def completeInitialization(self, **kwargs):
         self.data_mask = None
         self.grib_indexes = None
         self.grib_region = kwargs.get('grib_region', 'conus')
-        self.grid_region = grid_region = kwargs.get('grid_region', 'NE')
-        self.grid_shape = None
-        grid_source = kwargs.get('grid_source', 'acis')
-        self.grid_source = self.sourceConfig(grid_source)
-        dims = self.sourceConfig('reanalysis.grid').dimensions[grid_region]
-        self.grid_dimensions = (dims.lat, dims.lon)
         self.shared_grib_dir = kwargs.get('shared_grib_dir', True)
+        self.setGridParameters(kwargs.get('grid_source','acis'),
+                               kwargs.get('grid_region','NE'))
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def dataForHour(self, variable, grib_hour, **kwargs):
+    def dataFromGrib(self, variable, grib_hour, **kwargs):
         debug = kwargs.get('debug', False)
         return_units = kwargs.get('return_units', False)
 
-        found, reader = self.readerForHour(variable, grib_hour)
+        found, reader = self._readerForHour(variable, grib_hour)
         if not found:
             hour, filepath = reader
             if debug:
@@ -109,7 +105,7 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def lastAvailableHour(self, variable, reference_time):
+    def lastAvailableGribHour(self, variable, reference_time):
         year = reference_time.year
         month = reference_time.month
         last_day = lastDayOfMonth(year, month)
@@ -117,7 +113,8 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
         target_hour = tzutils.asUtcTime(last_hour, 'UTC')
         # look for the last available file in the month
         while target_hour.month == month:
-            filepath = self.gribFilepath(target_hour, variable, self.region)
+            filepath = self.gribFilepath(target_hour, variable, 
+                            self.grib_region, make_directory=False)
             if os.path.exists(filepath): return target_hour
             target_hour -= ONE_HOUR
         # no data available for the month
@@ -125,16 +122,12 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def readerForHour(self, variable, hour):
-        try:
-            reader = self.gribFileReader(hour, variable, self.grib_region,
-                                         shared_grib_dir=self.shared_grib_dir,
-                                         file_must_exist=True)
-            return True, reader
-
-        except IOError: # IOError means file for this hour does not exist
-            filepath = self.gribFilepath(hour, variable, self.grib_region)
-            return False, (hour, filepath)
+    def setGridParameters(self, grid_source='acis', grid_region='NE'):
+        self.grid_region = self.regionConfig(grid_region)
+        self.grid_source = self.sourceConfig(grid_source)
+        self.grid_shape = None
+        dims = self.sourceConfig('reanalysis.grid').dimensions[grid_region]
+        self.grid_dimensions = (dims.lat, dims.lon)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -162,11 +155,12 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def timeSlice(self, variable, slice_start_time, slice_end_time, **kwargs):
+        debug = kwargs.get('debug', False)
         failed = [ ]
 
         if self.grib_indexes is None: self._initStaticResources_()
 
-        region = kwargs.get('region', self.region)
+        region = kwargs.get('region', self.grib_region)
         
         grib_start_time = tzutils.tzaDatetime(slice_start_time, self.tzinfo)
         if slice_end_time > slice_start_time:
@@ -187,7 +181,7 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
             date_indx = 0
             grib_time = grib_start_time
             while units is None and grib_time <= grib_end_time:
-                success, package = self.dataForHour(variable, grib_time,
+                success, package = self.dataFromGrib(variable, grib_time,
                                         return_units=True, **kwargs)
                 if success:
                     units, data_for_hour = package
@@ -198,7 +192,7 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
                 date_indx += 1
 
             while grib_time <= grib_end_time:
-                OK, package = self.dataForHour(variable, grib_time, **kwargs)
+                OK, package = self.dataFromGrib(variable, grib_time, **kwargs)
                 if OK: data[date_indx,:,:] = package
                 else: failed.append(package)
 
@@ -206,7 +200,7 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
                 date_indx += 1
 
         else:
-            success, package = self.dataForHour(variable, grib_start_time,
+            success, package = self.dataFromGrib(variable, grib_start_time,
                                                 return_units=True, **kwargs)
             if not success:
                 data = N.empty(self.grid_dimensions, dtype=float)
@@ -216,10 +210,91 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
         return units, data, tuple(failed)
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _readerForHour(self, variable, hour):
+        try:
+            reader = self.gribFileReader(hour, variable, self.grib_region,
+                                         shared_grib_dir=self.shared_grib_dir,
+                                         file_must_exist=True)
+            return True, reader
+
+        except IOError: # IOError means file for this hour does not exist
+            filepath = self.gribFilepath(hour, variable, self.grib_region)
+            return False, (hour, filepath)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _dataForVariable(self, reader, variable, grib_time):
+    def _initStaticResources_(self):
+        reader = \
+            self.staticFileReader(self.grid_source, self.grid_region)
+        self.grid_shape, self.grib_indexes = reader.gribSourceIndexes('ndfd')
+        # get the region boundary mask
+        self.data_mask = reader.getData('cus_mask')
+        reader.close()
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class SmartReanalysisGribReader(SmartReanalysisGribMethods,
+                                ReanalysisGribFactoryMethods,
+                                StaticFileAccessorMethods,
+                                ReanalysisFactoryMethods, object):
+
+    def __init__(self, analysis_source, **kwargs):
+        config_object = self._initReanalysisFactory_(analysis_source)
+        self.degug = kwargs.get('debug', False)
+
+        # initialize common configuration structure
+        self._initFactoryConfig_(config_object, None, 'project')
+
+        # initialize reanalysis grib-specific configuration
+        self._initReanalysisGribFactory_(**kwargs)
+
+        # simple hook for subclasses to initialize additonal attributes  
+        self.completeInitialization(**kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def _registerAccessClasses(self):
+        self._registerGribAccessClasses()
+
+        from atmosci.seasonal.static import StaticGridFileReader
+        self._registerAccessManager('static', 'read', StaticGridFileReader)
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class ReanalysisDownloadFactory(SmartReanalysisGribMethods,
+                                ReanalysisGribFactoryMethods,
+                                ReanalysisGridFactoryMethods,
+                                StaticFileAccessorMethods,
+                                ReanalysisFactoryMethods, object):
+    """
+    Basic factory for accessing data in Reanalysis grib files.
+    """
+    def __init__(self, analysis_type, grib_source, grib_server, **kwargs):
+        analysis = '%s.%s' % (analysis_type, grib_source)
+        
+        config_object = self._initReanalysisFactory_(analysis, **kwargs)
+        self.grib_server = self.grib_source[grib_server]
+
+        # initialize common configuration structure
+        # self._initFactoryConfig_(config_object, None, None)
+        self._initFactoryConfig_(config_object, None, 'project')
+
+        # initialize reanalysis grid-specific configuration
+        self._initReanalysisGridFactory_(**kwargs)
+
+        # initialize reanalysis grib-specific configuration
+        self._initReanalysisGribFactory_(**kwargs)
+
+        # simple hook for subclasses to initialize additonal attributes  
+        self.completeInitialization(**kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def dataForVariable(self, reader, variable):
         # read the message
         try:
             message = reader.messageFor(variable)
@@ -240,30 +315,223 @@ class SmartReanalysisGribMethods(StaticFileAccessorMethods):
 
         return True, (units, data)
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def downloadChunkedGrib(self, utc_time, variable, region, acceptable_size, 
+                                  timeout, chunk_size, debug=False):
+        download_attempts = self.project.download.attempts
+        wait_times = self.project.download.wait_times
+
+        url_template = self.gribUrlTemplate(variable)
+        url = url_template % tzutils.tzaTimeStrings(utc_time, 'utc')
+        if debug: print '\nAttempting to download :', url
+
+        filename = self.gribFilename(utc_time, variable, region)
+        filepath = self.gribFilepath(utc_time, variable, region)
+        if debug: print 'to :', filepath
+
+        attempt = 0
+        while True:
+            packet_size = 0
+            wait_time = wait_times[attempt]
+            attempt += 1
+
+            try: 
+                if timeout > 0:
+                    req = requests.get(url, stream=True, timeout=timeout)
+                else: req = requests.get(url, stream=True)
+
+                expected_size = int(req.headers['content-length'])
+                if expected_size >= acceptable_size:
+                    packet_size = 0
+                    with open(filepath,'wb') as file_obj:
+                        for data in req.iter_content(chunk_size):
+                            packet_size += len(data)
+                            file_obj.write(data)
+
+                    if packet_size >= expected_size:
+                        return 200, filepath, url, variable
+
+            except requests.exceptions.Timeout as e:
+                if attempt < download_attempts:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    status = req.status_code
+                    msg = '%d : socket timeout. Download failed after %s attempts to download "%s" :: %s.'
+                    info = (status, download_attempts, variable, str(e))
+                    return status, filename, url, msg % info
+
+            except requests.exceptions.ConnectionError as e:
+                if attempt < download_attempts:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    status = req.status_code
+                    msg = 'Download of "%s" failed after %d attempts. Unable to connect to server :: %s'
+                    info = (variable, download_attempts, str(e))
+                    return status, filename, url, msg % info
+
+            except requests.exceptions.HTTPError as e:
+                if attempt < download_attempts:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    status = req.status_code
+                    if packet_size > 0:
+                        msg = '"%s" download failed with HTTP error code %s after %d attempts'
+                        msg += ' (%d bytes downloaded) :: %s'
+                        info = (variable, status, download_attempts, packet_size, str(e))
+                    else:
+                        msg = '"%s" download failed with HTTP error code %s after %d attempts :: %s'
+                        info = (variable, status, download_attempts, str(e))
+                    return status, filename, url, msg % info
+
+            except requests.exceptions.RequestException as e:
+                status = req.status_code
+                why = (e.code, e.reason, packet_size)
+                msg = 'Download failed with HTTP error code %s (%s), %d bytes downloaded'
+                return e.code, filename, url, msg % why
+
+            except Exception as e:
+                raise e
+
+            else:
+                if os.path.exists(filepath): os.remove(filepath)
+                print 'response package :\n', req.text, '\n'
+
+                if attempt == download_attempts:
+                    msg = 'HTTP response for %s contains %d bytes, expecting at least %d bytes.'
+                    msg += '\nThe incomplete file was deleted :\n    %s'
+                    info = (variable, expected_size, acceptable_size, filepath)
+                    return 999, filename, url, msg % info
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def downloadGribFile(self, utc_time, variable, region, acceptable_size, 
+                               timeout, debug=False):
+        download_attempts = self.project.download.attempts
+        wait_times = self.project.download.wait_times
+
+        url_template = self.gribUrlTemplate(variable)
+        url = url_template % tzutils.tzaTimeStrings(utc_time, 'utc')
+        if debug: print '\nAttempting to download :', url
+
+        filename = self.gribFilename(utc_time, variable, region)
+        filepath = self.gribFilepath(utc_time, variable, region)
+        if debug: print 'to :', filepath
+
+        attempt = 0
+        while True:
+            packet_size = 0
+            wait_time = wait_times[attempt]
+            attempt += 1
+
+            try: 
+                if timeout > 0:
+                    req = requests.get(url, stream=True, timeout=timeout)
+                else: req = requests.get(url, stream=True)
+
+                packet_size = int(req.headers['content-length'])
+                if packet_size >= acceptable_size:
+                    file_obj = open(filepath,'wb')
+                    file_obj.write(req.content)
+                    file_obj.close()
+                    return 200, filepath, url, variable
+
+            except requests.exceptions.Timeout as e:
+                if attempt < download_attempts:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    status = req.status_code
+                    msg = '%d : socket timeout. Download failed after %s attempts to download "%s" :: %s.'
+                    info = (status, download_attempts, variable, str(e))
+                    return status, filename, url, msg % info
+
+            except requests.exceptions.ConnectionError as e:
+                if attempt < download_attempts:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    status = req.status_code
+                    msg = 'Download of "%s" failed after %d attempts. Unable to connect to server :: %s'
+                    info = (variable, download_attempts, str(e))
+                    return status, filename, url, msg % info
+
+            except requests.exceptions.HTTPError as e:
+                if attempt < download_attempts:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    status = req.status_code
+                    if packet_size > 0:
+                        msg = '"%s" download failed with HTTP error code %s after %d attempts'
+                        msg += ' (%d bytes downloaded) :: %s'
+                        info = (variable, status, download_attempts, packet_size, str(e))
+                    else:
+                        msg = '"%s" download failed with HTTP error code %s after %d attempts :: %s'
+                        info = (variable, status, download_attempts, str(e))
+                    return status, filename, url, msg % info
+
+            except requests.exceptions.RequestException as e:
+                status = req.status_code
+                why = (e.code, e.reason, packet_size)
+                msg = 'Download failed with HTTP error code %s (%s), %d bytes downloaded'
+                return e.code, filename, url, msg % why
+
+            except Exception as e:
+                raise e
+
+            else:
+                if attempt == download_attempts:
+                    msg = 'HTTP response for "%s" contains %d bytes, expecting at least %d bytes.'
+                    msg += ' No data was saved.'
+                    info = (variable, packet_size, acceptable_size)
+                    return 999, filename, url, msg % info
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _initStaticResources_(self):
-        reader = self.staticFileReader(self.grid_source, self.grid_region)
-        self.grid_shape, self.grib_indexes = reader.gribSourceIndexes('ndfd')
-        # get the region boundary mask
-        self.data_mask = reader.getData('cus_mask')
-        reader.close()
+    def gribDownloadUrl(self, variable, utc_time):
+        template_args = {
+            'utc_date': utc_time.strftime('%Y%m%d'),
+            'utc_hour': utc_time.strftime('%H'), 
+            'utc_time': utc_time.strftime('%Y%m%d%H'),
+        }
+        return self.gribUrlTemplate(variable) % template_args
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+    def gribUrlTemplate(self, variable):
+        source = self.grib_source
+        print 'gribUrlTemplate :', source.name
+        filename = source.source_file_map.get(variable.upper(),
+                          source.source_file_map.get('data',
+                              source.source_file_map.get('default', None)))
+        print '    filename :', filename
+        if filename is not None:
+            server = self.grib_server
+            print '    server :', server.name
+            print '       url :', server.url
+            print '    subdir :', server.subdir
+            return os.path.join(server.url, server.subdir, filename)
 
-class SmartReanalysisGribReader(SmartReanalysisGribMethods,
-                                ReanalysisGribFactoryMethods, object):
+        info = (source_key, server_key, variable)
+        errmsg = 'Unable to construct URL template for %s.%s.%s' % info
+        raise LookupError, errmsg
 
-    def __init__(self, analysis_source, grid_source, grid_region,
-                       config_object=CONFIG, **kwargs):
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-        # initialize common configuration structure
-        self._initFactoryConfig_(config_object, None, 'project')
+    def serverURL(self, server_type='http'):
+        return self.grib_source.get(server_type, None)
 
-        # initialize reanalysis grib-specific configuration
-        self._initReanalysisGribFactory_(analysis_source, **kwargs)
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-        # simple hook for subclasses to initialize additonal attributes  
-        self.completeInitialization(**kwargs)
+    def _registerAccessClasses(self):
+        self._registerGribAccessClasses()
+        self._registerGridAccessClasses()
+
+        from atmosci.seasonal.static import StaticGridFileReader
+        self._registerAccessManager('static', 'read', StaticGridFileReader)
+
 

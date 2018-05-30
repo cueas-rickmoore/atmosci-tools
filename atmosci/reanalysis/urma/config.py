@@ -28,6 +28,7 @@ CONFIG.project.update( {
        'lon_spacing':(0.0238,0.0330),
        'node_spacing':0.0248, 'resolution':'~2.5km',
        'search_radius':0.0413,
+       'shared_source':True,
        'tag':'URMA',
 } )
 

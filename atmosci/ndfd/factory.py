@@ -9,7 +9,10 @@
 
 import os
 import datetime
-import urllib
+ONE_DAY = datetime.timedelta(days=1)
+
+import socket, urllib, urllib2
+from BaseHTTPServer import BaseHTTPRequestHandler 
 
 from atmosci.utils import tzutils
 from atmosci.utils.config import ConfigObject
@@ -76,7 +79,6 @@ class NDFDFactoryMethods(StaticFileAccessorMethods, PathConstructionMethods,
         end_time = start_time.replace(day=num_days, hour=23)
 
         return start_time, end_time
-
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -156,8 +158,8 @@ class NDFDFactoryMethods(StaticFileAccessorMethods, PathConstructionMethods,
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def variableConfig(self, variable, timespan='001-003'):
-        return self.ndfd.variables[timespan][variable.lower()]
+    def variableConfig(self, variable, period='001-003'):
+        return self.ndfd.variables[period][variable.lower()]
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -176,6 +178,7 @@ class NDFDFactoryMethods(StaticFileAccessorMethods, PathConstructionMethods,
 
     def _initNdfdFactory_(self, config_object, **kwargs):
         self.ndfd = config_object.sources.ndfd
+        self.grib_size_tolerance = self.ndfd.grib.size_tolerance
         timezone = kwargs.get('local_timezone', self.project.local_timezone)
         self.setLocalTimezone(timezone)
         if not hasattr(self, 'AccessRegistrars'):
@@ -200,26 +203,38 @@ def _registerNdfdGribReader(factory):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class NdfdGribFactoryMethods(NDFDFactoryMethods):
+class NdfdGribFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def datasetName(self, variable, timespan='001-003'):
-        return self.ndfd.variables[timespan][variable.lower()].grib_dataset
+    def datasetName(self, variable, period='001-003'):
+        return self.ndfd.variables[period][variable.lower()].grib_dataset
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def lastAvailableForecast(self, variable, period, region, prev_days=10):
+        last_available_fcast = None
+        fcast_date = datetime.date.today()
+        min_fcast_date = fcast_date - datetime.timedelta(days=prev_days)
+
+        # look for the last available file in the month
+        while fcast_date > min_fcast_date:
+            dirpath = self.ndfdDownloadDir(fcast_date, region, False)
+            if os.path.exists(dirpath):
+                filename = self.ndfdGribFilename(variable, period, region)
+                filepath = os.path.join(dirpath, filename)
+                # first file found is last file available
+                if os.path.exists(filepath): return fcast_date
+            fcast_date -= ONE_DAY
+
+        # no forecast data available for current season
+        return None
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def ndfdDownloadDir(self, fcast_date, region, dir_must_exist=True):
-        # determine root directory of forecast tree
-        shared_grib_dir = self.ndfd.get('shared_grib_dir',
-                               self.project.get('shared_forecast', False))
-        if shared_grib_dir:
-            root_dir = self.sharedRootDir()
-        else:
-            root_dir = self.config.dirpaths.get('forecast', default=None)
-            if root_dir is None: root_dir = self.projectRootDir()
-
-        template = self.config.sources.ndfd.grib.subdirs
+        root_dir = self.config.dirpaths.get(self.ndfd.grib.root_dir)
+        template = self.ndfd.grib.subdirs
         if isinstance(template, (tuple, list)):
             template = os.sep.join(template)
         template_args = self.timeToFilepath(fcast_date)
@@ -244,38 +259,42 @@ class NdfdGribFactoryMethods(NDFDFactoryMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def ndfdGribFilename(self, fcast_date, variable, timespan, region='conus'):
+    def ndfdGribFilename(self, variable, period, region='conus'):
         template_args = { 'region':self.regionToFilepath(region),
-                          'source':self.sourceToFilepath(self.ndfd),
-                          'timespan':timespan, 'variable':variable.lower() }
+                          'timespan':period, 'variable':variable.lower() }
         return self.ndfd.grib.file_template % template_args
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def ndfdGribFilepath(self, fcast_date, variable, timespan, region='conus',
+    def ndfdGribFilepath(self, fcast_date, variable, period, region='conus',
                                source='nws', **kwargs):
         forecast_dir = self.ndfdDownloadDir(fcast_date, region)
-        filename = \
-           self.ndfdGribFilename(fcast_date, variable, timespan, **kwargs)
+        filename = self.ndfdGribFilename(variable, period, **kwargs)
         return os.path.join(forecast_dir, filename)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def ndfdGribIterator(self, fcast_date, variable, timespan, region='conus',
+    def ndfdGribIterator(self, fcast_date, variable, period, region='conus',
                                 **kwargs):
-        filepath = self.ndfdGribFilepath(fcast_date, variable, timespan,
+        filepath = self.ndfdGribFilepath(fcast_date, variable, period,
                                          region, **kwargs)
         Class = self.fileAccessorClass('ndfd_grib','iter')
         return Class(filepath)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def ndfdGribReader(self, fcast_date, variable, timespan, region='conus',
+    def ndfdGribReader(self, fcast_date, variable, period, region='conus',
                              **kwargs):
         filepath = \
-            self.ndfdGribFilepath(fcast_date, variable, timespan, **kwargs)
+            self.ndfdGribFilepath(fcast_date, variable, period, **kwargs)
         Class = self.fileAccessorClass('ndfd_grib','read')
-        return Class(filepath, timespan, **kwargs)
+        return Class(filepath, period, **kwargs)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def ndfdUrlTemplate(self):
+        return '/'.join( (self.ndfd_server, self.ndfd_subdir_path,
+                          self.ndfd_file_template) )
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -285,15 +304,30 @@ class NdfdGribFactoryMethods(NDFDFactoryMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def setDownloadWaitTimes(self, wait_times):
+        if isinstance(wait_times, (tuple,list)):
+            self.wait_times = wait_times
+            self.download_attempts = len(wait_times)
+        else:
+            errmsg = '%s "wait_times" argument must be a list or tuple'
+            raise TypeError, errmsg % 'setDownloadWaitTimes :'
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     def setNdfdGribSource(self, source):
         self.ndfd_source = ndfd_source = self.ndfd[source]
         self.ndfd_server = ndfd_source.server_url
         self.ndfd_file_template = ndfd_source.filename
         self.ndfd_timespans = ndfd_source.timespans
         subdirs = ndfd_source.server_subdirs
-        if isinstance(subdirs, basestring):
-            self.ndfd_server_subdirs = subdirs
-        else: self.ndfd_server_subdirs = os.path.join(subdirs)
+        if isinstance(subdirs, tuple): subdirs = os.sep.join(subdirs)
+        self.ndfd_server_subdirs = subdirs
+        self.ndfd_source_uri = os.path.join(subdirs, ndfd_source.filename)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def targetGribSize(self, variable, period='001-003'):
+        return self.ndfd.variables[period][variable.lower()].grib_size
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -302,6 +336,8 @@ class NdfdGribFactoryMethods(NDFDFactoryMethods):
         self.setNdfdGribSource(kwargs.get('source', self.ndfd.default_source))
         self.setFileTimezone(kwargs.get('grib_timezone',
                                         self.ndfd.grib.timezone))
+        self.download_attempts = self.project.downloads.attempts
+        self.wait_times = self.project.downloads.wait_times
 
         self.AccessRegistrars.ndfd_grib = { 'iter': _registerNdfdGribIterator,
                                             'read': _registerNdfdGribReader }
@@ -309,7 +345,7 @@ class NdfdGribFactoryMethods(NDFDFactoryMethods):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class NdfdGribFileFactory(NdfdGribFactoryMethods, object):
+class NdfdGribFileFactory(NdfdGribFactoryMethods, NDFDFactoryMethods, object):
     """
     Factory for downloading and accessing data in NDFD grib files.
     """
@@ -325,45 +361,77 @@ class NdfdGribFileFactory(NdfdGribFactoryMethods, object):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def downloadLatestForecast(self, variables, periods=('001-003','004-007'),
-                                     region='conus', verbose=False):
-        target_date = self.timeOfLatestForecast()
-        url_template = self.ndfdUrlTemplate()
-        template_args = {'region':region.lower(), }
+    def downloadForecast(self, target_date, variable, period, region='conus',
+                               source='nws', debug=False):
+        download_attempts = self.download_attempts
 
-        filepaths = [ ]
-        for variable in variables:
-            template_args['variable'] = variable
-            for period in periods:
-                template_args['period'] = period
-                ndfd_url = url_template % template_args
-                if verbose: print '\ndownloading :', ndfd_url
-                local_filepath = self.ndfdGribFilepath(self.ndfd_config,
-                                      target_date, period, filetype)
-                if verbose: print 'to :', local_filepath
+        uri_args = { 'region':region.lower(), 'timespan': period, 'variable': variable }
+        uri = self.ndfd_source_uri % uri_args
+        
+        if debug: print '\nAttempting to download :', uri
+        local_filename = self.ndfdGribFilename(variable, period)
+        local_filepath = self.ndfdGribFilepath(target_date, variable, period,
+                                               region, source)
+        if debug: print 'to :', local_filepath
             
-                urllib.urlretrieve(ndfd_url, local_filepath)
-                filepaths.append(local_filepath)
+        url = os.path.join(self.ndfd_server, uri)
+        if debug: print '\nNDFD server url :', url
 
-        return target_date, tuple(filepaths)
+        attempt = 0
+        while True:
+            req = urllib2.Request(url)
+            wait_time = self.wait_times[attempt]
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            try:
+                response = urllib2.urlopen(req)
+            
+            except urllib2.URLError as e:
+                why = (e.code, e.reason)
+                msg = 'Download failed with HTTP error code %s (%s)'
+                return e.code, local_filepath, url, msg % why
 
-    def ndfdUrlTemplate(self):
-        return '/'.join( (self.ndfd_server, self.ndfd_subdir_path,
-                          self.ndfd_file_template) )
+            except urllib2.HTTPError as e:
+                if attempt < download_attempts:
+                    attempt += 1
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    msg = 'Download failed HTTP error code %s after %d attempts : %s'
+                    info = (e.code, download_attempts, 
+                            BaseHTTPRequestHandler.responses[e.code])
+                    return e.code, local_filename, url, msg % info
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            except socket.timeout as e:
+                if attempt < download_attempts:
+                    attempt += 1
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    msg = 'Socket timeout after %s attempts. Probable network error.'
+                    return 504, local_filename, url, msg % download_attempts
 
-    def setDownloadAttempts(self, attempts):
-        if isinstance(attempts, int): self.wait_attempts = attempts
-        else: self.wait_attempts = int(attempts)
+            except Exception as e:
+                raise e
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            else:
+                target_size = self.targetGribSize(variable, period)
+                acceptable_size = target_size * self.grib_size_tolerance
+                packet_size = int(response.headers['content-length'])
+                if debug:
+                    print 'size of response packet =', packet_size
 
-    def setDownloadWaitTime(self, seconds):
-        if isinstance(seconds, float): self.wait_seconds = seconds
-        else: self.wait_seconds = float(seconds)
+                if packet_size >= acceptable_size:
+                    file_obj = open(local_filepath,'wb')
+                    file_obj.write(response.read())
+                    file_obj.close()
+                    if debug: path = local_filepath
+                    else: path = local_filename
+                    return 200, path, url, 'Data was saved to file'
+
+                else:
+                    msg = 'HTTP response contains %d bytes, expecting at least %d bytes.'
+                    info = (packet_size, acceptable_size)
+                    return 999, local_filename, url, msg % info
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -385,7 +453,7 @@ def _registerNdfdGridReader(factory):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class NdfdGridFactoryMethods(NDFDFactoryMethods):
+class NdfdGridFactoryMethods:
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -420,23 +488,18 @@ class NdfdGridFactoryMethods(NDFDFactoryMethods):
             for key, value in time_attrs.items():
                 print '    %s : %s' % (key, repr(value))
 
+        builder.close()
         return builder
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def datasetName(self, variable, timespan='001-003'):
-        return self.ndfd.variables[timespan][variable.lower()].grid_dataset
+    def datasetName(self, variable, period='001-003'):
+        return self.ndfd.variables[period][variable.lower()].grid_dataset
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def ndfdGridDirpath(self, fcast_date, variable, region, **kwargs):
-        if self.project.get('shared_grid_dir', False):
-            root_dir = self.sharedRootDir()
-        else:
-            root_dir = self.config.dirpaths.get('ndfd',
-                            self.config.dirpaths.get('forecast',
-                                 self.projectRootDir()))
-
+        root_dir = self.config.dirpaths.get(self.ndfd.grid.root_dir)
         subdirs = kwargs.get('subdirs', self.ndfd.grid.subdirs)
         if isinstance(subdirs, tuple): subdirs = os.sep.join(subdirs)
         dirpath_template = os.path.join(root_dir, subdirs)
@@ -532,7 +595,7 @@ class NdfdGridFactoryMethods(NDFDFactoryMethods):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class NdfdGridFileFactory(NdfdGridFactoryMethods, object):
+class NdfdGridFileFactory(NdfdGridFactoryMethods, NDFDFactoryMethods, object):
     """
     Factory for managing data in NDFD forecast grid files.
     """
@@ -545,4 +608,6 @@ class NdfdGridFileFactory(NdfdGridFactoryMethods, object):
 
         # simple hook for subclasses to initialize additonal attributes  
         self.completeInitialization(**kwargs)
+
+
 

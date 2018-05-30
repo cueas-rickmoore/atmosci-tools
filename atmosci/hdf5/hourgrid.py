@@ -812,8 +812,8 @@ class Hdf5HourlyGridReaderMethods(TimeZoneManagementMethods):
         else:
             errmsg = 'Hour-based time files must have a "timezone" attribute. '
             errmsg += 'Indexing will not function properly for cross-timezone '
-            errmsg += 'retrievals.'
-            raise KeyError, errmsg
+            errmsg += 'retrievals.Filepath = %s'
+            raise KeyError, errmsg % self.filepath
             
         self.tzinfo = tzinfo = tzutils.asTimezoneObj(timezone)
 
@@ -1014,7 +1014,7 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
 
     # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - # - - - #
 
-    def _insert2DSlice(dataset, data, min_y, max_y, min_x, max_x):
+    def _insert2DSlice(dataset, data, min_y, max_y, min_x, max_x, **kwargs):
         shape = dataset.shape
         ndims = len(shape)
         errmsg = 'Cannot insert into %dD dataset using lon,lat bounds.'
@@ -1065,11 +1065,16 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
                 else: # max_x >= dataset.shape[1]
                     dataset[min_y:, min_x:] = data
 
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
+
         return dataset
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _insert3DSlice(self, data, start_index, min_y, max_y, min_x, max_x):
+    def _insert3DSlice(self, data, start_index, min_y, max_y, min_x, max_x,
+                             **kwargs):
         if data.dims == 2: end_index = start_index
         elif data.dims == 3: end_index = start_index + data.shape[0]
         else:
@@ -1079,17 +1084,19 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
         dataset = self.getDataset(dataset_path)
         if end_index == start_index: # single date
             return self._insertHourInBounds(dataset_path, data, start_index,
-                                            min_y, max_y, min_x, max_x)
+                                            min_y, max_y, min_x, max_x,
+                                            **kwargs)
 
         elif end_index < dataset.shape[0]:
-            return self._insertHoursInBounds(dataset_path, data,
-                                             start_index, end_index,
-                                             min_y, max_y, min_x, max_x)
+            return self._insertHoursInBounds(dataset_path, data, start_index,
+                                             end_index, min_y, max_y, min_x,
+                                             max_x, **kwargs)
 
         else: # end_index > dataset.shape[0]
             # insert to end of dataset
             return self._insertToEndInBounds(dataset_path, data, start_index,
-                                             min_y, max_y, min_x, max_x)
+                                             min_y, max_y, min_x, max_x,
+                                             **kwargs)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -1097,11 +1104,16 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
         end_index = time_index + data.shape[0]
         dataset = self.getDataset(dataset_path)
         dataset[time_index:end_index, y, x] = data
+
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
+
         return dataset
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _insertDataInBounds(dataset_name, dataset, data):
+    def _insertDataInBounds(dataset_name, dataset, data, **kwargs):
         # data within a bounding box
         if self._index_bounds is not None:
             min_y, min_x, max_y, max_x = self._index_bounds
@@ -1117,8 +1129,8 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _insertHourInBounds(self, dataset_path, data, hour_index,
-                                  min_y, max_y, min_x, max_x):
+    def _insertHourInBounds(self, dataset_path, data, hour_index, min_y, 
+                                  max_y, min_x, max_x, **kwargs):
         dataset = self.getDataset(dataset_path)
         shape = dataset.shape
         if max_y == min_y:
@@ -1143,12 +1155,16 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
             else: # max_x >= dataset.shape[2]
                 dataset[hour_index, min_y:, min_x:] = data
 
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
+
         return dataset
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def _insertHoursInBounds(self, dataset, data, start_index, end_index,
-                                   min_y, max_y, min_x, max_x):
+                                   min_y, max_y, min_x, max_x, **kwargs):
         dataset = self.getDataset(dataset_path)
         if max_y == min_y:
             if max_x == min_x: # retrieve data for one node
@@ -1171,6 +1187,10 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
                 dataset[start_index:end_index, min_y:, min_x:max_x] = data
             else: # max_x >= dataset.shape[2]
                 dataset[start_index:end_index, min_y:, min_x:] = data
+
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
 
         return dataset
 
@@ -1207,12 +1227,16 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
         else:
             raise ValueError, errmsg % (data.ndim, dataset_dims)
 
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
+
         return dataset
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def _insertToEndInBounds(self, dataset, data, start_index,
-                                   min_y, max_y, min_x, max_x):
+    def _insertToEndInBounds(self, dataset, data, start_index, min_y, max_y,
+                                   min_x, max_x, **kwargs):
         if max_y == min_y:
             if max_x == min_x: # retrieve data for one node
                 dataset[start_index:, min_y, min_x] = data
@@ -1234,6 +1258,10 @@ class Hdf5HourlyGridManagerMethods(Hdf5HourlyGridReaderMethods):
                 dataset[start_index:, min_y:, min_x:max_x] = data
             else: # max_x >= dataset.shape[2]
                 dataset[start_index:, min_y:, min_x:] = data
+
+        # always track time updated
+        timestamp = kwargs.get('timestamp', self.timestamp)
+        self.setDatasetAttribute(dataset_path, 'updated', timestamp)
 
         return dataset
 

@@ -25,9 +25,6 @@ def hourInTimezone(year, month, day, hour, tzinfo):
     # tzinfo must be an instance of pytz.tzinfo
     return tzinfo.localize(datetime.datetime(year, month, day, hour))
 
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
 def compareTimes(tmp_times, dpt_times):
     keymsg = 'Time attribute "%s" in %s file but not in %s file'
     timerr = 'Time attribute "%s" = %s in %s file but = %s in %s file'
@@ -90,11 +87,6 @@ parser.add_option('--localtz', action='store', dest='local_timezone',
 del default
 
 options, args = parser.parse_args()
-num_time_args = len(args) - 1
-if num_time_args not in (0,1,2,3,4,5,6,7):
-    errmsg = '%d date arguments passed. Only 0 up to 7 date arguments'
-    errmsg += ' are supported.\n%s'
-    raise RuntimeError, errmsg % (num_time_args, usage)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -111,117 +103,123 @@ verbose = options.verbose or debug
 if utc_file: file_tzinfo = tzutils.asTzinfo('UTC')
 else: file_tzinfo = local_tzinfo 
 
-analysis = args[0]
-
 now = datetime.datetime.now()
+num_time_args = len(args)
 if num_time_args == 0: # get data for the current local hour
     update_end_time = None
     update_start_time = None
 
 elif num_time_args == 1:
-    arg_1 = args[1]
-    if 'b' in arg_1: # span multiple hours ending at current LOCAL time
+    arg_0 = args[0]
+    if 'b' in arg_0: # span multiple hours ending at current LOCAL time
         update_end_time = hourInTimezone(now.year, now.month, now.day, now.hour, local_tzinfo)
         if not tzutils.isSameTimezone(local_tzinfo, file_tzinfo):
             # convert local time to UTC time (file_tzinfo)
             update_end_time = tzutils.toTimeInZone(update_end_time, file_tzinfo)
         hours = int(args_1.replace('b',''))
         update_start_time = update_end_time - datetime.timedelta(hours=hours)
-    else: # arg_1 == specific hour (UTC time) on current day
+    else: # arg_0 == specific hour (UTC time) on current day
         update_start_time = update_end_time = \
             hourInTimezone(now.year, now.month, now.day, int(args_1), file_tzinfo)
 
 elif num_time_args == 2:
+    arg_0 = int(args[0])
     arg_1 = int(args[1])
-    arg_2 = int(args[2])
-    if arg_2 == 99: # all hours for a month
+    if arg_1 == 99: # all hours for a month
         # args ... 1 = month, 2 is the trigger
-        update_start_time = hourInTimezone(now.year, arg_1, 1, 0, file_tzinfo)
-        last_day = lastDayOfMonth(now.year, arg_1)
-        update_end_time = hourInTimezone(now.year, arg_1, last_day, 23, file_tzinfo)
+        update_start_time = hourInTimezone(now.year, arg_0, 1, 0, file_tzinfo)
+        last_day = lastDayOfMonth(now.year, arg_0)
+        update_end_time = hourInTimezone(now.year, arg_0, last_day, 23, file_tzinfo)
     else: # all hours (UTC time) on multiple days in current month
         # args ... 1 = 1st day, 2 = last day
-        update_start_time = hourInTimezone(now.year, now.month, arg_1, 0, file_tzinfo)
-        update_end_time = hourInTimezone(now.year, now.month, arg_2, 23, file_tzinfo)
+        update_start_time = hourInTimezone(now.year, now.month, arg_0, 0, file_tzinfo)
+        update_end_time = hourInTimezone(now.year, now.month, arg_1, 23, file_tzinfo)
 
 elif num_time_args == 3: # span multiple hours (UTC time) on a single day
-    arg_1 = int(args[1])
-    if arg_1 > 99:
-        month = int(args[2])
-        arg_3 = int(args[3])
-        if arg_3 == 99: # all hours for a year/month
+    arg_0 = int(args[0])
+    if arg_0 > 99:
+        month = int(args[1])
+        arg_2 = int(args[2])
+        if arg_2 == 99: # all hours for a year/month
             # args ... 1 = year, 2 = month, 3 is the trigger
-            update_start_time = hourInTimezone(arg_1, month, 1, 0, file_tzinfo)
-            last_day = lastDayOfMonth(arg_1, month)
-            update_end_time = hourInTimezone(arg_1, month, last_day, 23, file_tzinfo)
+            update_start_time = hourInTimezone(arg_0, month, 1, 0, file_tzinfo)
+            last_day = lastDayOfMonth(arg_0, month)
+            update_end_time = hourInTimezone(arg_0, month, last_day, 23, file_tzinfo)
         else: # all hours for a specific year,month,day
             # args ... 1 = year, 2 = month, 3 = day
-            update_start_time = hourInTimezone(arg_1, month, arg_3, 0, file_tzinfo)
-            update_end_time = hourInTimezone(arg_1, month, arg_3, 23, file_tzinfo)
-    else: # specific hours for a specific day in current month
-        # args ... 1 = day, 2 = 1st hour, 3 = last hour
-        update_start_time = hourInTimezone(now.year, now.month, arg_1, arg_2, file_tzinfo)
-        update_end_time = hourInTimezone(now.year, now.month, arg_1, int(args[3]), file_tzinfo)
+            update_start_time = hourInTimezone(arg_0, month, arg_2, 0, file_tzinfo)
+            update_end_time = hourInTimezone(arg_0, month, arg_2, 23, file_tzinfo)
+    elif 'h' in args[1]:
+        first_hour = int(args[1].replace('h',''))
+        # specific hours for a specific day in current month
+        # args ... 0 = day, 1 = 1st hour, 2 = last hour
+        update_start_time = hourInTimezone(now.year, now.month, arg_0, first_hour, file_tzinfo)
+        update_end_time = hourInTimezone(now.year, now.month, arg_0, int(args[2]), file_tzinfo)
+    else:
+        # all hours for a specific days in same month
+        # args ... 0 = month, 1 = 1st day, 2 = last day
+        update_start_time = hourInTimezone(now.year, arg_0, int(args[1]), 0, file_tzinfo)
+        update_end_time = hourInTimezone(now.year, arg_0, int(args[2]), 23, file_tzinfo)
 
 elif num_time_args == 4:
+    arg_0 = int(args[0])
     arg_1 = int(args[1])
-    arg_2 = int(args[2])
-    if arg_1 > 99: # times in specific year
-        arg_4 = args[4]
-        if 'h' in arg_4: # specific year/month/day/hour
+    if arg_0 > 99: # times in specific year
+        arg_3 = args[3]
+        if 'h' in arg_3: # specific year/month/day/hour
             # args ... 1 = year, 2 = month, 3 = day, 4 = hour
-            hour = int(arg_4.replace('h','')) 
-            update_start_time = hourInTimezone(arg_1, arg_2, int(args[3]), hour, file_tzinfo)
+            hour = int(arg_3.replace('h','')) 
+            update_start_time = hourInTimezone(arg_0, arg_1, int(args[2]), hour, file_tzinfo)
             update_end_time = update_start_time
         else: # all hours (UTC time) for a multiple days in specific year/month
             # args ... 1 = year, 2 = month, 3 = 1st day, 4 = last day
-            update_start_time = hourInTimezone(arg_1, arg_2, int(args[3]), 0, file_tzinfo)
-            update_end_time = hourInTimezone(arg_1, arg_2, int(args[4]), 23, file_tzinfo)
+            update_start_time = hourInTimezone(arg_0, arg_1, int(args[2]), 0, file_tzinfo)
+            update_end_time = hourInTimezone(arg_0, arg_1, int(args[3]), 23, file_tzinfo)
     else: # # specific hours (UTC time) for month/day in current year
         # args ... 1 = month, 2 = day, 3 = 1st hour, 4 = last hour
-        update_start_time = hourInTimezone(now.year, arg_1, arg_2, int(args[3]), file_tzinfo)
-        update_end_time = hourInTimezone(now.year, arg_1, arg_2, int(args[4]), file_tzinfo)
+        update_start_time = hourInTimezone(now.year, arg_0, arg_1, int(args[2]), file_tzinfo)
+        update_end_time = hourInTimezone(now.year, arg_0, arg_1, int(args[3]), file_tzinfo)
 
 elif num_time_args == 5:
-    arg_1 = int(args[1])
-    if arg_1 > 99: # specific hours (UTC time) for specific year/month/day
+    arg_0 = int(args[0])
+    if arg_0 > 99: # specific hours (UTC time) for specific year/month/day
         # args ... 1 = year, 2 = month, 3 = day, 4 = 1st hour, 5 = last hour
-        month = int(args[2])
-        day = int(args[3]) 
-        update_start_time = hourInTimezone(arg_1, month, day, int(args[4]), file_tzinfo)
-        update_end_time = hourInTimezone(arg_1, month, day, int(args[5]), file_tzinfo)
+        month = int(args[1])
+        day = int(args[2]) 
+        update_start_time = hourInTimezone(arg_0, month, day, int(args[3]), file_tzinfo)
+        update_end_time = hourInTimezone(arg_0, month, day, int(args[4]), file_tzinfo)
     else: # mutiple days/hours in specific month of current year
         # args ... 1 = month, 2 = 1st day, 3 = 1st hour, 4 = last day, 5 = last hour
-        update_start_time = hourInTimezone(now.year, arg_1, int(args[2]), int(args[3]), file_tzinfo)
-        update_end_time = hourInTimezone(now.year, arg_1, int(args[4]), int(args[5]), file_tzinfo)
+        update_start_time = hourInTimezone(now.year, arg_0, int(args[1]), int(args[2]), file_tzinfo)
+        update_end_time = hourInTimezone(now.year, arg_0, int(args[3]), int(args[4]), file_tzinfo)
 
 elif num_time_args == 6:
-    arg_1 = int(args[1])
-    if arg_1 > 99: # times in specific year
-        arg_6 = int(args[6])
-        if arg_6 == 99: # all hours (UTC time) in specific year/month/day span
+    arg_0 = int(args[0])
+    if arg_0 > 99: # times in specific year
+        arg_5 = int(args[5])
+        if arg_5 == 99: # all hours (UTC time) in specific year/month/day span
             # args ... 1 = year, 2 = 1st month, 3 = 1st day, 4 = last month, 5 = last day
-            update_start_time = hourInTimezone(arg_1, int(args[2]), int(args[3]), 0, file_tzinfo)
-            update_end_time = hourInTimezone(arg_1, int(args[4]), int(args[5]), 23, file_tzinfo)
+            update_start_time = hourInTimezone(arg_0, int(args[1]), int(args[2]), 0, file_tzinfo)
+            update_end_time = hourInTimezone(arg_0, int(args[3]), int(args[4]), 23, file_tzinfo)
         else: # specific days/hours (UTC time) in specific year/month
             # args ... 1 = year, 2 = month, 3 = 1st day, 4 = 1st hour, 5 = last day, 5 = last hour
-            month = int(args[2])
-            update_start_time = hourInTimezone(arg_1, month, int(args[3]), int(args[4]), file_tzinfo)
-            update_end_time = hourInTimezone(arg_1, month, int(args[5]), int(args[6]), file_tzinfo)
+            month = int(args[1])
+            update_start_time = hourInTimezone(arg_0, month, int(args[2]), int(args[3]), file_tzinfo)
+            update_end_time = hourInTimezone(arg_0, month, int(args[4]), int(args[5]), file_tzinfo)
     else: # specific months/days/hours (UTC time) in current year
-        update_start_time = hourInTimezone(now.year, arg_1, int(args[2]), int(args[3]), file_tzinfo)
-        update_end_time = hourInTimezone(now.year, int(args[4]), int(args[5]), int(args[6]), file_tzinfo)
+        update_start_time = hourInTimezone(now.year, arg_0, int(args[1]), int(args[2]), file_tzinfo)
+        update_end_time = hourInTimezone(now.year, int(args[3]), int(args[4]), int(args[5]), file_tzinfo)
 
 elif num_time_args == 7: # multiple days in different month of the same year
     # args ... 1 = year, 2 = first month, 3 = 1st day, 4 = 1st hour,
     #                    5 = last month 6 = last day, 7 = last hour
-    year = int(args[1])
-    update_start_time = hourInTimezone(year, int(args[2]), int(args[3]), int(args[4]), file_tzinfo)
-    update_end_time = hourInTimezone(year, int(args[5]), int(args[6]), int(args[7]), file_tzinfo)
+    year = int(args[0])
+    update_start_time = hourInTimezone(year, int(args[1]), int(args[2]), int(args[3]), file_tzinfo)
+    update_end_time = hourInTimezone(year, int(args[4]), int(args[5]), int(args[6]), file_tzinfo)
 
 
 # create a factory for access to grid files
-grid_factory = ReanalysisGridFileFactory(CONFIG)
+grid_factory = ReanalysisGridFileFactory()
 if dev_mode: grid_factory.useDirpathsForMode('dev')
 
 if update_start_time is None:
@@ -353,7 +351,7 @@ for slice_start, slice_end in periods:
         msg = 'Adding RHUM for %d hours beginning %s :'
         print msg % (num_hours, tzutils.tzaString(slice_start))
     manager.open('a')
-    manager.updateReanalysisData(analysis, 'RHUM', slice_start, rhum)
+    manager.updateReanalysisData('rtma', 'RHUM', slice_start, rhum)
     manager.close()
 
     if verbose:

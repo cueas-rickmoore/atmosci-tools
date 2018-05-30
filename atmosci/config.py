@@ -14,17 +14,14 @@ if 'win32' in sys.platform:
     default = { 'data':'C:\\Work\\app_data',
                 'shared':'C:\\Work\\app_data\\shared',
                 'static':'C:\\Work\\app_data\\shared\\grid\\static',
+                'weather':'C:\\Work\\app_data\\shared',
                 'working':'C:\\Work' }
 else:
     default = { 'data':'/Volumes/data/app_data',
                 'shared':'/Volumes/data/app_data/shared',
                 'static':'/Volumes/data/app_data/shared/grid/static',
+                'weather':'/Volumes/data/app_data/shared',
                 'working':'/Volumes/data' }
-
-# set the following parameter to the location of temporary forecast files
-default['forecast'] = os.path.join(default['shared'], 'forecast')
-# set the following parameter to the location of temporary reanalysis files
-#default['reanalysis'] = os.path.join(default['shared'], 'reanalysis')
 
 # SET THE CONFIGURED dirpath TO THE default DIRECTORY PATHS
 ATMOSCFG.dirpaths = default
@@ -40,18 +37,18 @@ ATMOSCFG.modes = {
     'default':{'dirpaths':default,},
     'dev':{'dirpaths':{
            'data':'/Volumes/Transport/data/app_data',
-           'forecast':'/Volumes/Transport/data/app_data/shared/forecast',
            'shared':'/Volumes/Transport/data/app_data/shared',
            'static':'/Volumes/Transport/data/app_data/shared/grid/static',
+           'weather':'/Volumes/Transport/data/app_data/shared',
            'working':'/Volumes/Transport/data'
           },
     },
     'prod':{'dirpaths':default,},
     'test': {'dirpaths':{
              'data':'/Volumes/Transport/data/test_data',
-             'forecast':'/Volumes/Transport/data/test_data/shared/forecast',
              'shared':'/Volumes/Transport/data/test_data/shared',
              'static':'/Volumes/Transport/data/test_data/shared/grid/static',
+             'weather':'/Volumes/Transport/data/test_data/shared',
              'working':'/Volumes/Transport/data'
             },
     },

@@ -26,6 +26,7 @@ CONFIG = HOURLY_CONFIG.copy('config', None)
 del HOURLY_CONFIG
 
 CONFIG.project.update( {
+    'downloads':{ 'attempts':3, 'wait_times':(15,30,40) },
     'local_timezone':'US/Eastern',
     'shared_grib_dir': True,
     'shared_grid_dir': True,
@@ -59,7 +60,9 @@ CONFIG.sources.ndfd = {
         'node_spacing':0.0248,
         'region':'conus',
         'resolution':'~2.5km',
+        'root_dir':'weather',
         'search_radius':0.0413,
+        'size_tolerance':0.75,
         'subdirs':('forecast', '%(region)s','%(source)s','%(date)s'),
         'timezone':'UTC',
         'wait_attemps':5, # number of failed download attempts before quitting
@@ -76,6 +79,7 @@ CONFIG.sources.ndfd = {
         'node_spacing':CONFIG.sources.acis.node_spacing,
         'region':'NE',
         'resolution':'~2.5km',
+        'root_dir':'weather',
         'search_radius':CONFIG.sources.acis.search_radius,
         'source':'acis',
         'subdirs':('grid','%(region)s','%(source)s','%(year)d','%(month)s'),
@@ -86,7 +90,7 @@ CONFIG.sources.ndfd = {
 
 CONFIG.sources.ndfd.nws = {
     'filename':'ds.%(variable)s.bin',
-    'server_subdirs':('AR.$(region)s','VP.%(timespan)s'),
+    'server_subdirs':('AR.%(region)s','VP.%(timespan)s'),
     'server_url':'http://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd',
     'timespans':('001-003','004-007','008-450'),
 }
@@ -135,6 +139,7 @@ pop_grib = [12,24,36,48,60,72,84,96,108,120,132,144,156,168]
 CONFIG.sources.ndfd.variables = {
     '001-003': {
        'maxt':{'grib':'Maximum temperature',
+               'grib_size':2500000,
                'description':'12 hr Maximum temperature @ surface',
                'fill_method':None, # cannot be fudged
                'grib_dataset':'maxt',
@@ -144,6 +149,7 @@ CONFIG.sources.ndfd.variables = {
                'time':'minutes', 'count':2, 'span':1440, # three 24 hour intervals
         },
        'mint':{'grib':'Minimum temperature',
+               'grib_size':2500000,
                'description':'12 hr Minimum temperature @ surface',
                'fill_method':None, # cannot be fudged
                'grib_dataset':'mint',
@@ -153,15 +159,17 @@ CONFIG.sources.ndfd.variables = {
                'time':'minutes', 'count':2, 'span':1440, # two 24 hour intervals
         },
        'pop':{'grib':'Total_precipitation_surface_12_Minute_Accumulation_probability_above_0p254',
-                'description':'Total precipitation',
-                'fill_method':'copy', # same value at each hour in timespan
-                'grib_dataset':'pop12',
-                'grid_dataset':'POP',
-                'grid_filetype':'POP12',
-                'missing':'NaNf', 'type':float, 'units':'kg/m^2',
-                'time':'hours', 'count':8, 'span':12, # eight 12 hour intervals
+              'grib_size':2500000,
+              'description':'Total precipitation',
+              'fill_method':'copy', # same value at each hour in timespan
+              'grib_dataset':'pop12',
+              'grid_dataset':'POP',
+              'grid_filetype':'POP12',
+              'missing':'NaNf', 'type':float, 'units':'kg/m^2',
+              'time':'hours', 'count':8, 'span':12, # eight 12 hour intervals
         },
        'pop12':{'grib':'Total_precipitation_surface_12_Minute_Accumulation_probability_above_0p254',
+                'grib_size':2000000,
                 'description':'Total precipitation',
                 'fill_method':'copy', # same value at each hour in timespan
                 'grib_dataset':'pop12',
@@ -170,17 +178,8 @@ CONFIG.sources.ndfd.variables = {
                 'missing':'NaNf', 'type':float, 'units':'kg/m^2',
                 'time':'hours', 'count':8, 'span':12, # eight 12 hour intervals
         },
-       'rhm':{'grib':'Relative humidity',
-              'description':'Relative humidity @ surface',
-              'fill_method':'scaled', # by avg from prev hour to fcast hour
-              'grib_dataset':'rhm',
-              'grid_dataset':'RHUM',
-              'grid_filetype':'RHUM',
-              'missing':'NaNf', 'type':float, 'units':'kg/m^2',
-              # 36 one hour intervals, six 3 hour intervals
-              'time':'hours', 'count':(36,1), 'span':(1,3),
-        },
        'qpf':{'grib':'Total precipitation',
+              'grib_size':3000000,
               'description':'6 hour accumulated precipitation @ surface',
               'grid_filetype':'PCPN',
               'fill_method':'spread', # spread amount/span equally to all hours
@@ -190,7 +189,19 @@ CONFIG.sources.ndfd.variables = {
               'missing':'NaNf', 'type':float, 'units':'kg/m^2',
               'time':'hours', 'count':9, 'span':6, # nine 6 hour intervals
         },
+       'rhm':{'grib':'Relative humidity',
+              'grib_size':30000000,
+              'description':'Relative humidity @ surface',
+              'fill_method':'scaled', # by avg from prev hour to fcast hour
+              'grib_dataset':'rhm',
+              'grid_dataset':'RHUM',
+              'grid_filetype':'RHUM',
+              'missing':'NaNf', 'type':float, 'units':'kg/m^2',
+              # 36 one hour intervals, six 3 hour intervals
+              'time':'hours', 'count':(36,1), 'span':(1,3),
+        },
        'td':{'grib':'Dewpoint temperature',
+             'grib_size':35000000,
              'description':'Dewpoint temperature @ surface',
              'fill_method':'scaled', # by avg from prev hour to fcast hour
              'grib_dataset':'td',
@@ -201,6 +212,7 @@ CONFIG.sources.ndfd.variables = {
              'time':'minutes', 'count':(36,6), 'span':(1,3),
         },
        'temp':{'grib':'Temperature',
+               'grib_size':43000000,
                'description':'Maximum temperature @ surface',
                'fill_method':'scaled', # by avg from fcast hour to prev hour
                'grib_dataset':'temp',
@@ -211,6 +223,7 @@ CONFIG.sources.ndfd.variables = {
                'time':'minutes', 'count':(36,6), 'span':(1,3),
         },
        'wx':{'grib':'Wx',
+             'grib_size':11000000,
              'description':'Weather @ surface',
              'fill_method':'copy', # same value at each hour in timespan
              'grib_dataset':'wx',
@@ -223,6 +236,7 @@ CONFIG.sources.ndfd.variables = {
     },
     '004-007': {
        'maxt':{'grib':'Maximum temperature',
+               'grib_size':3500000,
                'description':'12 hr Maximum temperature @ surface',
                'fudge_type':None, # cannot be fudged
                'grib_dataset':'maxt',
@@ -232,6 +246,7 @@ CONFIG.sources.ndfd.variables = {
                'time':'hours', 'count':4, 'span':24, # four 24 hour intervals
         },
        'mint':{'grib':'Minimum temperature',
+               'grib_size':3500000,
                'description':'12 hr Minimum temperature @ surface',
                'fudge_type':None, # cannot be fudged
                'grib_dataset':'mint',
@@ -241,6 +256,7 @@ CONFIG.sources.ndfd.variables = {
                'time':'hours', 'count':4, 'span':24, # four 24 hour intervals
         },
        'pop12':{'grib':'Total_precipitation_surface_12_Minute_Accumulation_probability_above_0p254',
+                'grib_size':3000000,
                 'description':'Total precipitation',
                 'fill_method':'copy', # same value at each hour in timespan
                 'grib_dataset':'pop12',
@@ -250,6 +266,7 @@ CONFIG.sources.ndfd.variables = {
                 'time':'hours', 'count':8, 'span':12, # eight 12 hour intervals
         },
        'rhm':{'grib':'Relative humidity',
+              'grib_size':11000000,
               'description':'Relative humidity @ surface',
               'fill_method':'scaled', # by avg from fcast hour to prev hour
               'grib_dataset':'rhm',
@@ -259,6 +276,7 @@ CONFIG.sources.ndfd.variables = {
               'time':'hours', 'count':16, 'span':6, # sixteen 6 hour intervals
         },
        'td':{'grib':'Dewpoint temperature',
+             'grib_size':12000000,
              'description':'Dewpoint temperature @ surface',
              'fill_method':'scaled', # by avg from fcast hour to prev hour
              'grib_dataset':'td',
@@ -268,6 +286,7 @@ CONFIG.sources.ndfd.variables = {
              'time':'hours', 'count':16, 'span':6, # sixteen 6 hour intervals
         },
        'temp':{'grib':'Temperature',
+               'grib_size':15000000,
                'description':'Maximum temperature @ surface',
                'fill_method':'scaled', # by avg from fcast hour to prev hour
                'grib_dataset':'temp',
@@ -277,6 +296,7 @@ CONFIG.sources.ndfd.variables = {
                'time':'hours', 'count':16, 'span':6, # sixteen 6 hour intervals
         },
        'wx':{'grib':'Wx',
+             'grib_size':3600000,
              'description':'Weather @ surface',
              'fill_method':'copy', # same value at each hour in timespan
              'grib_dataset':'wx',

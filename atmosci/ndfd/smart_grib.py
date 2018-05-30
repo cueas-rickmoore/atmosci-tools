@@ -186,7 +186,7 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def dataForRegion(self, fcast_date, variable, timespans, grib_region,
+    def dataForRegion(self, fcast_date, variable, timespan, grib_region,
                             grid_region, grid_source, fill_gaps=False,
                             graceful_fail=False, debug=False):
         """
@@ -200,17 +200,6 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
         """
         data_records = [ ]
 
-        if isinstance(timespans, basestring):
-            timespans = (timespans,)
-        elif not isinstance(timespans, (tuple, list)):
-            errmsg = '"%s" is an invalid type for timespans argument.'
-            errmsg += '\nArgument type must be one of string, list, tuple.'
-            raise TypeError, errmsg % type(timespan)
-
-        for timespan in timespans:
-            if timespan not in VALID_TIMESPANS:
-                raise ValueError, BAD_TIMESPAN % timespan
-
         # parameters for reshaping the grib arrays
         grid_shape_2D, grib_indexes, grid_mask = \
             self.gribToGridParameters(grid_source, grid_region)
@@ -222,54 +211,60 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
         # code for filling gaps between records
         if fill_gaps and fill_method is not None:
             prev_record = None
-            for timespan in timespans:
-                self.openGribFile(fcast_date, variable, timespan, grib_region)
-                # retrieve pointers to all messages in the file
-                messages = self.gribs.select()
-                first_msg = messages[0]
-                missing = float(first_msg.missingValue)
-                units = first_msg.units
+            if debug:
+                info = (timespan, variable, str(fcast_date))
+                print '\nReading %s %s grib file for %s' % info
 
-                # fill the gap between this timespan and the previous one
-                if not prev_record is None:
-                    grid = reshapeGrid(first_msg, missing, grib_indexes,
-                                       grid_shape_2D, grid_mask)
-                    next_record = ('ndfd',asUTCTime(first_msg.validDate),grid)
-                    data_records.extend(self.fillTimeGap(prev_record,
-                                             next_record, varconfig))
+            # retrieve pointers to all messages in the file
+            self.openGribFile(fcast_date, variable, timespan, grib_region)
+            messages = self.gribs.select()
+            first_msg = messages[0]
+            missing = float(first_msg.missingValue)
+            units = first_msg.units
 
-                # update with records for the current timespan
-                data = self.dataWithoutGaps(messages, varconfig,
-                            grib_indexes, grid_shape_2D, grid_mask, debug)
-                data_records.extend(data)
+            # fill the gap between this timespan and the previous one
+            if not prev_record is None:
+                grid = reshapeGrid(first_msg, missing, grib_indexes,
+                                   grid_shape_2D, grid_mask)
+                next_record = ('ndfd',asUTCTime(first_msg.validDate),grid)
+                data_records.extend(self.fillTimeGap(prev_record,
+                                         next_record, varconfig))
 
-                # track last record in previous timespan
-                msg = messages[-1]
-                grid = reshapeGrid(msg, missing, grib_indexes,
-                                        grid_shape_2D, grid_mask)
-                prev_record = ('ndfd', asUTCTime(msg.validDate), grid)
+            # update with records for the current timespan
+            data = self.dataWithoutGaps(messages, varconfig, grib_indexes,
+                                        grid_shape_2D, grid_mask, debug)
+            data_records.extend(data)
 
-                self.closeGribfile()
+            # track last record in previous timespan
+            msg = messages[-1]
+            grid = reshapeGrid(msg, missing, grib_indexes, grid_shape_2D,
+                               grid_mask)
+            prev_record = ('ndfd', asUTCTime(msg.validDate), grid)
+
+            self.closeGribfile()
         
         # code that preserves gaps between records
         else:
-            for timespan in timespans:
-                self.openGribFile(fcast_date, variable, timespan, grib_region)
-                # retrieve pointers to all messages in the file
-                messages = self.gribs.select()
-                first_msg = messages[0]
-                missing = float(first_msg.missingValue)
-                units = first_msg.units
+            if debug:
+                info = (variable, timespan, str(fcast_date))
+                print '\nReading %s %s grib file for %s' % info
 
-                for msg in messages:
-                    grid = reshapeGrid(msg, missing, grib_indexes,
-                                       grid_shape_2D, grid_mask)
-                    this_time =  asUTCTime(msg.validDate)
-                    data_records.append(('ndfd', this_time, grid))
-                    if debug:
-                        stats = (N.nanmin(grid), N.nanmax(grid))
-                        print 'value stats :', msg.validDate, stats
-                self.closeGribfile()
+            # retrieve pointers to all messages in the file
+            self.openGribFile(fcast_date, variable, timespan, grib_region)
+            messages = self.gribs.select()
+            first_msg = messages[0]
+            missing = float(first_msg.missingValue)
+            units = first_msg.units
+
+            for msg in messages:
+                grid = reshapeGrid(msg, missing, grib_indexes,
+                                   grid_shape_2D, grid_mask)
+                this_time =  asUTCTime(msg.validDate)
+                data_records.append(('ndfd', this_time, grid))
+                if debug:
+                    stats = (N.nanmin(grid), N.nanmax(grid))
+                    print 'value stats :', msg.validDate, stats
+            self.closeGribfile()
 
         return units, data_records
 
@@ -287,8 +282,9 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
         prev_time = asUTCTime(first_msg.validDate)
         prev_record = ('ndfd', prev_time, prev_grid)
         if debug:
+            print 'processing %d grib messages :' % len(messages)
             stats = (N.nanmin(prev_grid), N.nanmax(prev_grid))
-            print 'value range :', prev_time, stats
+            print '    stats :', first_msg.validDate, stats
 
         open_gap = False
         for msg in messages[1:]:
@@ -298,7 +294,7 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
             this_record = ('ndfd', this_time, grid)
             if debug:
                 stats = (N.nanmin(grid), N.nanmax(grid))
-                print 'value stats :', msg.validDate, stats
+                print '    stats :', msg.validDate, stats
 
             gap = hoursInTimespan(prev_time, this_time, inclusive=False)
             if gap > 1:
@@ -316,12 +312,6 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
         records = self.fillTimeGap(prev_record, None, varconfig)
         if len(records) > 0: data_records.extend(records)
         else: data_records.append(prev_record)
-
-        if debug:
-            msg = messages[-1]
-            grid = reshapeGrid(msg, missing, grib_indexes, grid_shape_2D,
-                               grid_mask)
-            print '\nlast msg :', msg.validDate, N.nanmin(grid), N.nanmax(grid)
 
         return data_records
 
@@ -396,8 +386,18 @@ class SmartNdfdGribFileReader(NdfdGribFileFactory):
         grib_filepath = self.ndfdGribFilepath(fcast_date, variable, timespan,
                                               region, **kwargs)
         if not os.path.exists(grib_filepath):
-            raise ValueError, grib_filepath
-        self.gribs = pygrib.open(grib_filepath)
+            info = (timespan, variable, str(fcast_date), grib_filepath)
+            errmsg = '%s %s grib file for %s was not found\n %s'
+            print errmsg % info
+            raise ValueError, 'file not found'
+
+        if kwargs.get('debug',False):
+            print '\nReading gribs from :\n', grib_filepath
+        try:
+            self.gribs = pygrib.open(grib_filepath)
+        except e:
+            print 'Error reading gribs from file :\n    ', grib_filepath
+            raise e
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
