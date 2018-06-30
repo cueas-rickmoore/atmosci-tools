@@ -170,7 +170,7 @@ def yearFromDate(date):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def lastDayOfMonth(year_or_date, month=None):
+def lastDayOfMonth(year_or_date, month=None, as_date=False):
     if isinstance(year_or_date, (datetime.date, datetime.datetime)):
         year = year_or_date.year
         month = year_or_date.month
@@ -181,12 +181,16 @@ def lastDayOfMonth(year_or_date, month=None):
         raise TypeError, errmsg + ' datetime.datetime.'
 
     if month in (1,3,5,7,8,10,12):
-        return 31
+        last_day = 31
     elif month in (4,6,9,11):
-        return 30
+        last_day = 30
     else:
-        if isLeapYear(year): return 29
-        return 28
+        if isLeapYear(year): last_day = 29
+        else: last_day = 28
+
+    if as_date: return datetime.date(year, month, last_day)
+    return last_day
+
 lastDayInMonth = lastDayOfMonth
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

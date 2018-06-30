@@ -3,8 +3,11 @@
 import os, sys
 import datetime
 
-from atmosci.seasonal.factory import SeasonalStaticFileFactory
 from atmosci.reanalysis.factory import ReanalysisGridFileFactory
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+from atmosci.reanalysis.config import CONFIG
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -102,33 +105,16 @@ else:
     reference_time = timespan[1]
 del kwargs['timezone']
 
-# get builder for the reference time span
-builder = factory.gridFileBuilder(reference_time, grib_var_name,
-                                  grid_region, file_timezone, None, None,
-                                  use_time_in_path=use_time_in_path,
-                                  **kwargs)
-print '\nbuilding grid file :', builder.filepath
-
-# get coordinate arrays from the region's static file
-factory = SeasonalStaticFileFactory()
-if dev_mode: factory.useDirpathsForMode('dev')
-region = factory.regionConfig(grid_region)
-source = factory.sourceConfig(grid_source)
-reader = factory.staticFileReader(source, region)
-lats = reader.getData('lat')
-lons = reader.getData('lon')
-reader.close()
-del reader
-
-# build all of the files
-builder.build(lons=lons, lats=lats)
-del lats, lons
+# build grid file
+print '\nBuilding "%s" grid file for %s' % (grib_var_name, reference_time.strftime('%B, %Y'))
+manager = factory.buildReanalysisGridFile(reference_time, grib_var_name, grid_region, 
+                                          file_timezone, grid_source)
 
 if debug:
-    builder.open('r')
-    time_attrs = builder.timeAttributes(grib_var_name)
-    builder.close()
-    print '\nbuild file time attrs :\n', time_attrs
+    manager.open('r')
+    time_attrs = manager.timeAttributes(grib_var_name)
+    manager.close()
+    print '\ngrid file time attrs :\n', time_attrs
 
-print '\ncompleted build for "%s" grid file.' % grib_var_name
+print '\nCompleted build for "%s" grid file.' % grib_var_name
 

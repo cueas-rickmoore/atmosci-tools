@@ -542,7 +542,8 @@ class ConfigObject(object):
 
         if self.parent is None and self._is_my_name_(key):
             if path_len == 1: return self
-            else: return self._get_value_of_(path[1:], default)
+            else:
+                return self._get_value_of_(path[1:], default)
 
         child = self.__dict__['__CHILDREN__'].get(key, None)
         if child is not None:
